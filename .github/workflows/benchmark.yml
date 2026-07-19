@@ -56,9 +56,11 @@ jobs:
             LAST_MSG=$(git log -1 --format=%s)
             if echo "$LAST_MSG" | grep -q "chore: update model order from daily benchmark"; then
               git commit --amend --no-edit --date="$(date -R)"
+              git pull --rebase origin main
               git push --force
             else
               git commit -m "chore: update model order from daily benchmark [skip ci]"
+              git pull --rebase origin main
               git push
             fi
             # Move the latest version tag to this commit
