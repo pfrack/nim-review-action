@@ -59,12 +59,16 @@ async function run(): Promise<void> {
 
     try {
       const review = await reviewFileWithFallback(client, filePath, diff, config);
-      sections.push(`\n#### \`${filePath}\`\n\n${review}`);
+      if (review && review.trim()) {
+        sections.push(`\n#### \`${filePath}\`\n\n${review}`);
+        reviewed++;
+      } else {
+        core.info(`Skipping ${filePath} - no review content returned`);
+      }
     } catch (err) {
       sections.push(`\n#### \`${filePath}\`\n\nReview failed: \`${err}\``);
+      reviewed++;
     }
-
-    reviewed++;
   }
 
   await postComment(repo, prNumber, token, sections.join('\n'));
