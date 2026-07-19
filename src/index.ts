@@ -52,28 +52,6 @@ async function run(): Promise<void> {
 
   core.info(`Reviewing PR #${prNumber} in ${repo}`);
 
-  // Probe models to find alive ones (like the Go version did)
-  core.startGroup('Probing NIM models');
-  const aliveModels: string[] = [];
-  for (const model of config.models) {
-    try {
-      const alive = await client.probeModel(model);
-      if (alive) {
-        aliveModels.push(model);
-        core.info(`${model} ok`);
-      } else {
-        core.info(`${model} FAIL`);
-      }
-    } catch {
-      core.info(`${model} FAIL`);
-    }
-  }
-  core.endGroup();
-
-  // Fall back to full list if no models responded
-  const modelsToUse = aliveModels.length > 0 ? aliveModels : config.models;
-  core.info(`Alive models: ${modelsToUse.join(' -> ')}`);
-
   const filesDiff = await fetchDiff(repo, prNumber, token);
 
   if (Object.keys(filesDiff).length === 0) {
@@ -82,17 +60,14 @@ async function run(): Promise<void> {
     return;
   }
 
-  // Filter files and build combined diff
+  // Filter files
   const filenames = Object.keys(filesDiff).sort();
   const reviewableFiles: string[] = [];
-  let combinedDiff = '';
 
   for (const filePath of filenames) {
-    if (shouldExclude(filePath, config.excludePatterns)) {
-      continue;
+    if (!shouldExclude(filePath, config.excludePatterns)) {
+      reviewableFiles.push(filePath);
     }
-    reviewableFiles.push(filePath);
-    combinedDiff += `\n--- ${filePath} ---\n${filesDiff[filePath]}\n`;
   }
 
   if (reviewableFiles.length === 0) {
@@ -107,19 +82,20 @@ async function run(): Promise<void> {
 
   core.info(`Reviewing ${filesToReview.length} files...`);
 
-  // Build the diff for the files we'll actually review
+  // Build combined diff
   let diffToSend = '';
   for (const filePath of filesToReview) {
     diffToSend += `\n--- ${filePath} ---\n${filesDiff[filePath]}\n`;
   }
 
-  // Send the whole diff at once
   const userMsg = `Review the following code changes:\n\n\`\`\`diff\n${diffToSend}\n\`\`\``;
 
+  // Try models in order, stop at first success
   let review = '';
-  for (const model of modelsToUse) {
+  let usedModel = '';
+  for (const model of config.models) {
     try {
-      core.info(`Trying model: ${model}`);
+      core.info(`Trying ${model}...`);
       const result = await client.chat(model, [
         { role: 'system', content: config.systemPrompt || BASE_SYSTEM_PROMPT },
         { role: 'user', content: userMsg },
@@ -127,12 +103,13 @@ async function run(): Promise<void> {
 
       if (result.content && result.content.trim()) {
         review = result.content;
-        core.info(`Review completed with ${model}`);
+        usedModel = model;
+        core.info(`Done with ${model}`);
         break;
       }
-      core.info(`Model ${model} returned empty content, trying next...`);
+      core.info(`${model} returned empty, trying next...`);
     } catch (err) {
-      core.info(`Model ${model} failed: ${err}`);
+      core.info(`${model} failed: ${err}`);
     }
   }
 
@@ -140,7 +117,7 @@ async function run(): Promise<void> {
     review = 'No review content returned from any model.';
   }
 
-  const sections: string[] = [`### NIM Code Review\n\n_Models: \`${config.models.join(' -> ')}\`_\n`];
+  const sections: string[] = [`### NIM Code Review\n\n_Model: \`${usedModel}\`_\n`];
   sections.push(`\n${review}`);
 
   if (truncated) {
