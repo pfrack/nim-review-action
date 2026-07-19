@@ -417,10 +417,10 @@ Add comprehensive tests for the new combined chain logic and update the README w
 
 #### Automated
 
-- [ ] 3.1 `npm run build` passes
-- [ ] 3.2 `npm test` passes
-- [ ] 3.3 `getSweBenchScore('mistral-medium-3.5')` returns `0.776`
-- [ ] 3.4 `updateActionYmlMistral()` correctly replaces `mistral_models` default
+- [x] 3.1 `npm run build` passes — e4c70df
+- [x] 3.2 `npm test` passes — e4c70df
+- [x] 3.3 `getSweBenchScore('mistral-medium-3.5')` returns `0.776` — e4c70df
+- [x] 3.4 `updateActionYmlMistral()` correctly replaces `mistral_models` default — e4c70df
 
 ### Phase 4: Benchmark Workflow
 
