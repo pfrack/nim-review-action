@@ -20,6 +20,7 @@ export function loadConfig() {
         apiKey: core.getInput('nim_api_key'),
         models: splitCSV(core.getInput('nim_models')),
         mistralApiKey: core.getInput('mistral_api_key') || '',
+        mistralBaseUrl: core.getInput('mistral_base_url') || 'https://api.mistral.ai/v1',
         mistralModels: splitCSV(core.getInput('mistral_models') ||
             'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'),
         maxFiles: parseInt(core.getInput('max_files') || '100', 10) || 100,

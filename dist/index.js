@@ -3,7 +3,6 @@ import { NimClient } from './nim-client.js';
 import { loadConfig, fetchDiff, postComment } from './review.js';
 import { loadEvent } from './event.js';
 import { buildCombinedChain } from './model-chain.js';
-const MISTRAL_BASE_URL = 'https://api.mistral.ai/v1';
 function globMatch(str, pattern) {
     const regex = new RegExp('^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
     return regex.test(str);
@@ -33,7 +32,7 @@ async function run() {
         throw new Error('At least one of nim_api_key or mistral_api_key is required');
     }
     const nimClient = config.apiKey ? new NimClient(config.baseURL, config.apiKey) : null;
-    const mistralClient = config.mistralApiKey ? new NimClient(MISTRAL_BASE_URL, config.mistralApiKey) : null;
+    const mistralClient = config.mistralApiKey ? new NimClient(config.mistralBaseUrl, config.mistralApiKey) : null;
     const clients = {
         nim: nimClient,
         mistral: mistralClient,

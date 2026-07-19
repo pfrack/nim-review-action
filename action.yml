@@ -17,6 +17,9 @@ inputs:
   mistral_api_key:
     description: 'Mistral API key (enables Mistral models in fallback chain)'
     default: ''
+  mistral_base_url:
+    description: 'Mistral API base URL'
+    default: 'https://api.mistral.ai/v1'
   mistral_models:
     description: 'Comma-separated Mistral model fallback chain'
     default: 'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'

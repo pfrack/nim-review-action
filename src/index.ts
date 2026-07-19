@@ -4,8 +4,6 @@ import { loadConfig, fetchDiff, postComment } from './review.js';
 import { loadEvent } from './event.js';
 import { buildCombinedChain, type Provider } from './model-chain.js';
 
-const MISTRAL_BASE_URL = 'https://api.mistral.ai/v1';
-
 function globMatch(str: string, pattern: string): boolean {
   const regex = new RegExp(
     '^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$'
@@ -39,7 +37,7 @@ async function run(): Promise<void> {
   }
 
   const nimClient = config.apiKey ? new NimClient(config.baseURL, config.apiKey) : null;
-  const mistralClient = config.mistralApiKey ? new NimClient(MISTRAL_BASE_URL, config.mistralApiKey) : null;
+  const mistralClient = config.mistralApiKey ? new NimClient(config.mistralBaseUrl, config.mistralApiKey) : null;
 
   const clients: Record<Provider, NimClient | null> = {
     nim: nimClient,
