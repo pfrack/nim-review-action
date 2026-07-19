@@ -55,6 +55,9 @@ describe('resolveSystemPrompt', () => {
         mistralApiKey: '',
         mistralBaseUrl: '',
         mistralModels: [],
+        customApiUrl: '',
+        customModel: '',
+        customApiKey: '',
         maxFiles: 15,
         excludePatterns: [],
         systemPrompt: '',
@@ -163,6 +166,9 @@ describe('reviewFileWithFallback — routing', () => {
         mistralApiKey: 'mistral-key',
         mistralBaseUrl: 'https://api.mistral.ai/v1',
         mistralModels: ['mistral-model'],
+        customApiUrl: '',
+        customModel: '',
+        customApiKey: '',
         maxFiles: 10,
         excludePatterns: [],
         systemPrompt: '',
@@ -197,6 +203,7 @@ describe('reviewFileWithFallback — routing', () => {
             const clients = {
                 nim: nimClient,
                 mistral: mistralClient,
+                custom: null,
             };
             // Mistral first in chain
             const chain = [
@@ -241,6 +248,7 @@ describe('reviewFileWithFallback — routing', () => {
             const clients = {
                 nim: nimClient,
                 mistral: mistralClient,
+                custom: null,
             };
             const chain = [
                 { id: 'fail-model', provider: 'mistral' },
@@ -275,6 +283,7 @@ describe('reviewFileWithFallback — routing', () => {
             const clients = {
                 nim: nimClient,
                 mistral: null, // No Mistral client
+                custom: null,
             };
             const chain = [
                 { id: 'mistral-model', provider: 'mistral' },
@@ -304,6 +313,7 @@ describe('reviewFileWithFallback — routing', () => {
             const clients = {
                 nim: nimClient,
                 mistral: null,
+                custom: null,
             };
             const chain = [
                 { id: 'nim-model', provider: 'nim' },

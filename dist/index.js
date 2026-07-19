@@ -28,16 +28,23 @@ Respond in concise markdown with findings for each file. For each finding use:
 If the code looks fine, say "No issues found."`;
 async function run() {
     const config = loadConfig();
-    if (!config.apiKey && !config.mistralApiKey) {
-        throw new Error('At least one of nim_api_key or mistral_api_key is required');
+    if (!config.apiKey && !config.mistralApiKey && !(config.customApiUrl && config.customModel)) {
+        throw new Error('At least one of nim_api_key, mistral_api_key, or custom_api_url + custom_model is required');
+    }
+    if (!config.apiKey && !config.mistralApiKey && config.customApiUrl && config.customModel) {
+        core.warning('Running with only custom API configured — no fallback chain available if custom model fails');
     }
     const nimClient = config.apiKey ? new NimClient(config.baseURL, config.apiKey) : null;
     const mistralClient = config.mistralApiKey ? new NimClient(config.mistralBaseUrl, config.mistralApiKey) : null;
+    const customClient = (config.customApiUrl && config.customModel)
+        ? new NimClient(config.customApiUrl, config.customApiKey)
+        : null;
     const clients = {
         nim: nimClient,
         mistral: mistralClient,
+        custom: customClient,
     };
-    const chain = buildCombinedChain(config.models, config.mistralModels, !!config.apiKey, !!config.mistralApiKey);
+    const chain = buildCombinedChain(config.models, config.mistralModels, !!config.apiKey, !!config.mistralApiKey, config.customModel, !!(config.customApiUrl && config.customModel));
     const event = loadEvent();
     const prNumber = event.pull_request.number;
     const repo = process.env.GITHUB_REPOSITORY;

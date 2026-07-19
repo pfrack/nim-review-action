@@ -6,7 +6,7 @@ import { getSweBenchScore } from './bench-reorder.js';
  *
  * Stable sort — preserves original order within same score.
  */
-export function buildCombinedChain(nimModels, mistralModels, hasNimKey, hasMistralKey) {
+export function buildCombinedChain(nimModels, mistralModels, hasNimKey, hasMistralKey, customModel, hasCustomKey) {
     const chain = [];
     if (hasNimKey) {
         for (const id of nimModels) {
@@ -24,5 +24,9 @@ export function buildCombinedChain(nimModels, mistralModels, hasNimKey, hasMistr
         const scoreB = getSweBenchScore(b.id);
         return scoreB - scoreA;
     });
+    // Prepend custom model — always tried first regardless of score
+    if (customModel && hasCustomKey) {
+        chain.unshift({ id: customModel, provider: 'custom' });
+    }
     return chain;
 }

@@ -27760,6 +27760,9 @@ function loadConfig() {
         mistralBaseUrl: core.getInput('mistral_base_url') || 'https://api.mistral.ai/v1',
         mistralModels: splitCSV(core.getInput('mistral_models') ||
             'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'),
+        customApiUrl: core.getInput('custom_api_url') || '',
+        customModel: core.getInput('custom_model') || '',
+        customApiKey: core.getInput('custom_api_key') || '',
         maxFiles: parseInt(core.getInput('max_files') || '100', 10) || 100,
         excludePatterns: splitCSV(core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'),
         systemPrompt: core.getInput('nim_system_prompt'),
@@ -28171,7 +28174,7 @@ if (isMainModule) {
  *
  * Stable sort — preserves original order within same score.
  */
-function buildCombinedChain(nimModels, mistralModels, hasNimKey, hasMistralKey) {
+function buildCombinedChain(nimModels, mistralModels, hasNimKey, hasMistralKey, customModel, hasCustomKey) {
     const chain = [];
     if (hasNimKey) {
         for (const id of nimModels) {
@@ -28189,6 +28192,10 @@ function buildCombinedChain(nimModels, mistralModels, hasNimKey, hasMistralKey) 
         const scoreB = getSweBenchScore(b.id);
         return scoreB - scoreA;
     });
+    // Prepend custom model — always tried first regardless of score
+    if (customModel && hasCustomKey) {
+        chain.unshift({ id: customModel, provider: 'custom' });
+    }
     return chain;
 }
 
@@ -28223,16 +28230,23 @@ Respond in concise markdown with findings for each file. For each finding use:
 If the code looks fine, say "No issues found."`;
 async function run() {
     const config = loadConfig();
-    if (!config.apiKey && !config.mistralApiKey) {
-        throw new Error('At least one of nim_api_key or mistral_api_key is required');
+    if (!config.apiKey && !config.mistralApiKey && !(config.customApiUrl && config.customModel)) {
+        throw new Error('At least one of nim_api_key, mistral_api_key, or custom_api_url + custom_model is required');
+    }
+    if (!config.apiKey && !config.mistralApiKey && config.customApiUrl && config.customModel) {
+        core.warning('Running with only custom API configured — no fallback chain available if custom model fails');
     }
     const nimClient = config.apiKey ? new NimClient(config.baseURL, config.apiKey) : null;
     const mistralClient = config.mistralApiKey ? new NimClient(config.mistralBaseUrl, config.mistralApiKey) : null;
+    const customClient = (config.customApiUrl && config.customModel)
+        ? new NimClient(config.customApiUrl, config.customApiKey)
+        : null;
     const clients = {
         nim: nimClient,
         mistral: mistralClient,
+        custom: customClient,
     };
-    const chain = buildCombinedChain(config.models, config.mistralModels, !!config.apiKey, !!config.mistralApiKey);
+    const chain = buildCombinedChain(config.models, config.mistralModels, !!config.apiKey, !!config.mistralApiKey, config.customModel, !!(config.customApiUrl && config.customModel));
     const event = loadEvent();
     const prNumber = event.pull_request.number;
     const repo = process.env.GITHUB_REPOSITORY;

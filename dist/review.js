@@ -23,6 +23,9 @@ export function loadConfig() {
         mistralBaseUrl: core.getInput('mistral_base_url') || 'https://api.mistral.ai/v1',
         mistralModels: splitCSV(core.getInput('mistral_models') ||
             'mistral-medium-3.5,mistral-large-2512,mistral-small-2603,codestral-2508'),
+        customApiUrl: core.getInput('custom_api_url') || '',
+        customModel: core.getInput('custom_model') || '',
+        customApiKey: core.getInput('custom_api_key') || '',
         maxFiles: parseInt(core.getInput('max_files') || '100', 10) || 100,
         excludePatterns: splitCSV(core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'),
         systemPrompt: core.getInput('nim_system_prompt'),
