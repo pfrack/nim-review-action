@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc && cp -r src/prompts dist/prompts",
-    "test": "node --test dist/**/*.test.js",
+    "test": "node --test dist/*.test.js",
     "package": "ncc build src/index.ts -o dist && cp -r src/prompts dist/prompts"
   },
   "dependencies": {
