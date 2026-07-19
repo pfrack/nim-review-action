@@ -54,4 +54,7 @@ jobs:
           else
             git commit -m "chore: update model order from daily benchmark [skip ci]"
             git push
+            # Move v1 tag to latest commit so action consumers get updated models
+            git tag -f v1
+            git push origin v1 --force
           fi
