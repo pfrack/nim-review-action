@@ -1,0 +1,30 @@
+name: 'NIM Code Review'
+description: 'AI-powered code review using NVIDIA NIM models with fallback'
+branding:
+  icon: 'search'
+  color: 'green'
+inputs:
+  nim_api_key:
+    description: 'NVIDIA NIM API key'
+    required: true
+  nim_base_url:
+    description: 'NIM API base URL'
+    default: 'https://integrate.api.nvidia.com/v1'
+  nim_models:
+    description: 'Comma-separated fallback model chain'
+    default: 'stepfun-ai/step-3.7,meta/llama-3.3-70b-instruct,deepseek-ai/deepseek-v4-pro,nvidia/llama-3.1-nemotron-70b-instruct,mistralai/mistral-large-3-675b-instruct-2512,qwen/qwen3.5-397b-a17b,minimaxai/minimax-m3,z-ai/glm-5.2'
+  max_files:
+    description: 'Max files to review per PR'
+    default: '15'
+  exclude_patterns:
+    description: 'Comma-separated glob patterns to skip'
+    default: '*.lock,*.md,*.txt,*.svg,*.png,*.sum'
+  nim_system_prompt:
+    description: 'Custom system prompt (overrides or appends to default)'
+    default: ''
+  nim_prompt_mode:
+    description: 'How to use custom prompt: append (default) or replace'
+    default: 'append'
+runs:
+  using: 'node20'
+  main: 'dist/index.js'

@@ -1,0 +1,112 @@
+export class NimClient {
+    baseURL;
+    apiKey;
+    constructor(baseURL, apiKey) {
+        this.baseURL = baseURL.replace(/\/+$/, '');
+        this.apiKey = apiKey;
+    }
+    async chat(model, messages, opts = {}) {
+        const payload = {
+            model,
+            messages,
+            temperature: opts.temperature ?? 0.2,
+            max_tokens: opts.maxTokens ?? 1024,
+            stream: false,
+        };
+        const start = Date.now();
+        const resp = await fetch(`${this.baseURL}/chat/completions`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${this.apiKey}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(180_000),
+        });
+        if (!resp.ok) {
+            const body = await resp.text();
+            throw new Error(`NIM returned ${resp.status}: ${body}`);
+        }
+        const data = await resp.json();
+        if (!data.choices || data.choices.length === 0) {
+            throw new Error('NIM returned no choices');
+        }
+        return {
+            content: (data.choices[0].message?.content ?? '').trim(),
+            usage: data.usage,
+            latency: Date.now() - start,
+        };
+    }
+    async *chatStream(model, messages, opts = {}) {
+        const payload = {
+            model,
+            messages,
+            temperature: opts.temperature ?? 0.2,
+            max_tokens: opts.maxTokens ?? 1024,
+            stream: true,
+        };
+        const resp = await fetch(`${this.baseURL}/chat/completions`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${this.apiKey}`,
+                'Content-Type': 'application/json',
+                'Accept': 'text/event-stream',
+            },
+            body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(180_000),
+        });
+        if (!resp.ok) {
+            const body = await resp.text();
+            throw new Error(`NIM returned ${resp.status}: ${body}`);
+        }
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let firstTokenAt = null;
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done)
+                break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() ?? '';
+            for (const line of lines) {
+                if (!line.startsWith('data: '))
+                    continue;
+                const data = line.slice(6).trim();
+                if (data === '[DONE]') {
+                    yield { delta: '', done: true, firstTokenAt: null };
+                    return;
+                }
+                let chunk;
+                try {
+                    chunk = JSON.parse(data);
+                }
+                catch {
+                    continue;
+                }
+                if (!chunk.choices || chunk.choices.length === 0)
+                    continue;
+                const delta = chunk.choices[0].delta?.content ?? '';
+                if (!delta)
+                    continue;
+                if (firstTokenAt === null) {
+                    firstTokenAt = Date.now();
+                }
+                yield { delta, done: false, firstTokenAt };
+            }
+        }
+    }
+    async probeModel(model) {
+        try {
+            await this.chat(model, [{ role: 'user', content: 'Say hi' }], {
+                temperature: 0,
+                maxTokens: 8,
+            });
+            return true;
+        }
+        catch {
+            return false;
+        }
+    }
+}
