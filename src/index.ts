@@ -55,7 +55,7 @@ async function run(): Promise<void> {
   const filesDiff = await fetchDiff(repo, prNumber, token);
 
   if (Object.keys(filesDiff).length === 0) {
-    const msg = '### NIM Code Review\n\nNo reviewable files found in this PR (all excluded).';
+    const msg = '### AI Code Review\n\nNo reviewable files found in this PR (all excluded).';
     await postComment(repo, prNumber, token, msg);
     return;
   }
@@ -71,7 +71,7 @@ async function run(): Promise<void> {
   }
 
   if (reviewableFiles.length === 0) {
-    const msg = '### NIM Code Review\n\nNo reviewable files found in this PR (all excluded).';
+    const msg = '### AI Code Review\n\nNo reviewable files found in this PR (all excluded).';
     await postComment(repo, prNumber, token, msg);
     return;
   }
@@ -117,7 +117,8 @@ async function run(): Promise<void> {
     review = 'No review content returned from any model.';
   }
 
-  const sections: string[] = [`### NIM Code Review\n\n_Model: \`${usedModel}\`_\n`];
+  const modelShort = usedModel.split('/').pop() || usedModel;
+  const sections: string[] = [`### AI Code Review\n\n<sub>Model: ${modelShort}</sub>\n`];
   sections.push(`\n${review}`);
 
   if (truncated) {
