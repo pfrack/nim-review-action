@@ -27739,7 +27739,7 @@ function prompts_languageForTemplate(filePath) {
 
 const BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
 Analyse the diff provided for bugs, security issues, performance problems, and style/readability concerns.
-Respond in concise markdown. For each finding use:
+Respond in concise markdown with findings for each file. For each finding use:
 - **File:** path
 - **Severity:** Critical | Warning | Suggestion
 - **Line (approx):** number or range
@@ -28207,15 +28207,17 @@ function buildCombinedChain(opts) {
 async function run() {
     const config = loadConfig();
     const hasCustom = !!(config.customApiUrl && config.customModel);
-    if (!config.apiKey && !config.mistralApiKey && !hasCustom) {
-        throw new Error('At least one of nim_api_key, mistral_api_key, or custom_api_url + custom_model is required');
-    }
+    // Validate custom URL protocol first (more specific error)
     if (config.customApiUrl) {
         const url = new URL(config.customApiUrl);
         if (url.protocol !== 'https:' && !(url.protocol === 'http:' && (url.hostname === 'localhost' || url.hostname === '127.0.0.1'))) {
             throw new Error('custom_api_url must use https:// (or http:// for localhost only)');
         }
     }
+    if (!config.apiKey && !config.mistralApiKey && !hasCustom) {
+        throw new Error('At least one of nim_api_key, mistral_api_key, or custom_api_url + custom_model is required');
+    }
+    // Informational: custom-only means no fallback if custom model fails
     if (hasCustom && !config.apiKey && !config.mistralApiKey) {
         core.warning('Running with only custom API configured — no fallback chain available if custom model fails');
     }
