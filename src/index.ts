@@ -4,7 +4,7 @@ import { loadConfig, fetchDiff, postComment } from './review.js';
 import { loadEvent } from './event.js';
 import { buildCombinedChain, type Provider } from './model-chain.js';
 
-export const MISTRAL_BASE_URL = 'https://api.mistral.ai/v1';
+const MISTRAL_BASE_URL = 'https://api.mistral.ai/v1';
 
 function globMatch(str: string, pattern: string): boolean {
   const regex = new RegExp(

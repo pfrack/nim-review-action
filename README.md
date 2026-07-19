@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pfrack/nim-review-action@v1
+      - uses: pfrack/review-action@v1
         with:
           nim_api_key: ${{ secrets.NIM_API_KEY }}
 ```
@@ -47,7 +47,7 @@ At least one of `nim_api_key` or `mistral_api_key` is required. When both are pr
 Use Mistral models directly via the Mistral API (no NIM proxy needed):
 
 ```yaml
-- uses: pfrack/nim-review-action@v1
+- uses: pfrack/review-action@v1
   with:
     mistral_api_key: ${{ secrets.MISTRAL_API_KEY }}
 ```
@@ -62,7 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pfrack/nim-review-action@v1
+      - uses: pfrack/review-action@v1
         with:
           mistral_api_key: ${{ secrets.MISTRAL_API_KEY }}
           mistral_models: 'mistral-medium-3.5,codestral-2508'
@@ -78,7 +78,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pfrack/nim-review-action@v1
+      - uses: pfrack/review-action@v1
         with:
           nim_api_key: ${{ secrets.NIM_API_KEY }}
           mistral_api_key: ${{ secrets.MISTRAL_API_KEY }}
@@ -137,7 +137,7 @@ Unknown file extensions fall back to the base review prompt.
 Override the default system prompt via environment variables:
 
 ```yaml
-- uses: pfrack/nim-review-action@v1
+- uses: pfrack/review-action@v1
   with:
     nim_api_key: ${{ secrets.NIM_API_KEY }}
     nim_system_prompt: "Focus on security vulnerabilities and OWASP Top 10"

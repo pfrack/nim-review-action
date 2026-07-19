@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
+import { createServer } from 'node:http';
 import { parseDiff, shouldExclude, resolveSystemPrompt, loadConfig, reviewFileWithFallback } from './review.js';
 import { NimClient } from './nim-client.js';
 describe('parseDiff', () => {
@@ -97,9 +98,17 @@ describe('resolveSystemPrompt', () => {
     });
 });
 describe('loadConfig — mistral fields', () => {
+    const ENV_KEYS = [
+        'INPUT_MISTRAL_API_KEY', 'INPUT_MISTRAL_MODELS',
+        'INPUT_NIM_API_KEY', 'INPUT_NIM_BASE_URL', 'INPUT_NIM_MODELS',
+        'INPUT_MAX_FILES', 'INPUT_EXCLUDE_PATTERNS',
+        'INPUT_NIM_SYSTEM_PROMPT', 'INPUT_NIM_PROMPT_MODE',
+    ];
+    const saved = {};
     it('reads mistralApiKey and mistralModels from inputs', () => {
-        // loadConfig uses @actions/core.getInput which reads INPUT_* env vars
-        // Set them to simulate action inputs
+        // Save original values
+        for (const key of ENV_KEYS)
+            saved[key] = process.env[key];
         process.env['INPUT_MISTRAL_API_KEY'] = 'test-mistral-key';
         process.env['INPUT_MISTRAL_MODELS'] = 'mistral-medium-3.5,codestral-2508';
         process.env['INPUT_NIM_API_KEY'] = 'test-nim-key';
@@ -114,19 +123,17 @@ describe('loadConfig — mistral fields', () => {
         assert.deepStrictEqual(config.mistralModels, ['mistral-medium-3.5', 'codestral-2508']);
         assert.strictEqual(config.apiKey, 'test-nim-key');
         assert.deepStrictEqual(config.models, ['deepseek-ai/deepseek-v4-pro']);
-        // Cleanup
-        delete process.env['INPUT_MISTRAL_API_KEY'];
-        delete process.env['INPUT_MISTRAL_MODELS'];
-        delete process.env['INPUT_NIM_API_KEY'];
-        delete process.env['INPUT_NIM_BASE_URL'];
-        delete process.env['INPUT_NIM_MODELS'];
-        delete process.env['INPUT_MAX_FILES'];
-        delete process.env['INPUT_EXCLUDE_PATTERNS'];
-        delete process.env['INPUT_NIM_SYSTEM_PROMPT'];
-        delete process.env['INPUT_NIM_PROMPT_MODE'];
+        // Restore original values
+        for (const key of ENV_KEYS) {
+            if (saved[key] === undefined)
+                delete process.env[key];
+            else
+                process.env[key] = saved[key];
+        }
     });
     it('defaults mistral fields to empty when not provided', () => {
-        // Clear all inputs
+        for (const key of ENV_KEYS)
+            saved[key] = process.env[key];
         process.env['INPUT_MISTRAL_API_KEY'] = '';
         process.env['INPUT_MISTRAL_MODELS'] = '';
         process.env['INPUT_NIM_API_KEY'] = 'nim-key';
@@ -138,18 +145,13 @@ describe('loadConfig — mistral fields', () => {
         process.env['INPUT_NIM_PROMPT_MODE'] = '';
         const config = loadConfig();
         assert.strictEqual(config.mistralApiKey, '');
-        // Should get defaults when empty string provided
         assert.deepStrictEqual(config.mistralModels, ['mistral-medium-3.5', 'mistral-large-2512', 'mistral-small-2603', 'codestral-2508']);
-        // Cleanup
-        delete process.env['INPUT_MISTRAL_API_KEY'];
-        delete process.env['INPUT_MISTRAL_MODELS'];
-        delete process.env['INPUT_NIM_API_KEY'];
-        delete process.env['INPUT_NIM_BASE_URL'];
-        delete process.env['INPUT_NIM_MODELS'];
-        delete process.env['INPUT_MAX_FILES'];
-        delete process.env['INPUT_EXCLUDE_PATTERNS'];
-        delete process.env['INPUT_NIM_SYSTEM_PROMPT'];
-        delete process.env['INPUT_NIM_PROMPT_MODE'];
+        for (const key of ENV_KEYS) {
+            if (saved[key] === undefined)
+                delete process.env[key];
+            else
+                process.env[key] = saved[key];
+        }
     });
 });
 describe('reviewFileWithFallback — routing', () => {
@@ -165,8 +167,6 @@ describe('reviewFileWithFallback — routing', () => {
         promptMode: 'append',
     };
     it('routes to correct client based on provider tag', async () => {
-        // Create a mock HTTP server to simulate both providers
-        const { createServer } = await import('node:http');
         let nimCalled = false;
         let mistralCalled = false;
         const server = createServer((req, res) => {
@@ -187,27 +187,30 @@ describe('reviewFileWithFallback — routing', () => {
             });
         });
         await new Promise(resolve => server.listen(0, resolve));
-        const port = server.address().port;
-        const baseUrl = `http://localhost:${port}`;
-        const nimClient = new NimClient(baseUrl, 'nim-key');
-        const mistralClient = new NimClient(baseUrl, 'mistral-key');
-        const clients = {
-            nim: nimClient,
-            mistral: mistralClient,
-        };
-        // Mistral first in chain
-        const chain = [
-            { id: 'mistral-model', provider: 'mistral' },
-            { id: 'nim-model', provider: 'nim' },
-        ];
-        const result = await reviewFileWithFallback(clients, 'test.ts', '+ line', chain, testConfig);
-        assert.ok(result.includes('mistral-model'));
-        assert.strictEqual(mistralCalled, true);
-        assert.strictEqual(nimCalled, false); // shouldn't reach NIM since Mistral succeeds
-        server.close();
+        try {
+            const port = server.address().port;
+            const baseUrl = `http://localhost:${port}`;
+            const nimClient = new NimClient(baseUrl, 'nim-key');
+            const mistralClient = new NimClient(baseUrl, 'mistral-key');
+            const clients = {
+                nim: nimClient,
+                mistral: mistralClient,
+            };
+            // Mistral first in chain
+            const chain = [
+                { id: 'mistral-model', provider: 'mistral' },
+                { id: 'nim-model', provider: 'nim' },
+            ];
+            const result = await reviewFileWithFallback(clients, 'test.ts', '+ line', chain, testConfig);
+            assert.ok(result.includes('mistral-model'));
+            assert.strictEqual(mistralCalled, true);
+            assert.strictEqual(nimCalled, false); // shouldn't reach NIM since Mistral succeeds
+        }
+        finally {
+            server.close();
+        }
     });
     it('falls through to next provider on failure', async () => {
-        const { createServer } = await import('node:http');
         let callCount = 0;
         const server = createServer((req, res) => {
             let body = '';
@@ -228,25 +231,28 @@ describe('reviewFileWithFallback — routing', () => {
             });
         });
         await new Promise(resolve => server.listen(0, resolve));
-        const port = server.address().port;
-        const baseUrl = `http://localhost:${port}`;
-        const nimClient = new NimClient(baseUrl, 'nim-key');
-        const mistralClient = new NimClient(baseUrl, 'mistral-key');
-        const clients = {
-            nim: nimClient,
-            mistral: mistralClient,
-        };
-        const chain = [
-            { id: 'fail-model', provider: 'mistral' },
-            { id: 'nim-model', provider: 'nim' },
-        ];
-        const result = await reviewFileWithFallback(clients, 'test.ts', '+ line', chain, testConfig);
-        assert.ok(result.includes('nim-model'));
-        assert.strictEqual(callCount, 2);
-        server.close();
+        try {
+            const port = server.address().port;
+            const baseUrl = `http://localhost:${port}`;
+            const nimClient = new NimClient(baseUrl, 'nim-key');
+            const mistralClient = new NimClient(baseUrl, 'mistral-key');
+            const clients = {
+                nim: nimClient,
+                mistral: mistralClient,
+            };
+            const chain = [
+                { id: 'fail-model', provider: 'mistral' },
+                { id: 'nim-model', provider: 'nim' },
+            ];
+            const result = await reviewFileWithFallback(clients, 'test.ts', '+ line', chain, testConfig);
+            assert.ok(result.includes('nim-model'));
+            assert.strictEqual(callCount, 2);
+        }
+        finally {
+            server.close();
+        }
     });
     it('skips models whose client is null', async () => {
-        const { createServer } = await import('node:http');
         const server = createServer((req, res) => {
             let body = '';
             req.on('data', chunk => { body += chunk; });
@@ -260,23 +266,26 @@ describe('reviewFileWithFallback — routing', () => {
             });
         });
         await new Promise(resolve => server.listen(0, resolve));
-        const port = server.address().port;
-        const baseUrl = `http://localhost:${port}`;
-        const nimClient = new NimClient(baseUrl, 'nim-key');
-        const clients = {
-            nim: nimClient,
-            mistral: null, // No Mistral client
-        };
-        const chain = [
-            { id: 'mistral-model', provider: 'mistral' },
-            { id: 'nim-model', provider: 'nim' },
-        ];
-        const result = await reviewFileWithFallback(clients, 'test.ts', '+ line', chain, testConfig);
-        assert.ok(result.includes('nim-model'));
-        server.close();
+        try {
+            const port = server.address().port;
+            const baseUrl = `http://localhost:${port}`;
+            const nimClient = new NimClient(baseUrl, 'nim-key');
+            const clients = {
+                nim: nimClient,
+                mistral: null, // No Mistral client
+            };
+            const chain = [
+                { id: 'mistral-model', provider: 'mistral' },
+                { id: 'nim-model', provider: 'nim' },
+            ];
+            const result = await reviewFileWithFallback(clients, 'test.ts', '+ line', chain, testConfig);
+            assert.ok(result.includes('nim-model'));
+        }
+        finally {
+            server.close();
+        }
     });
     it('throws when all models fail', async () => {
-        const { createServer } = await import('node:http');
         const server = createServer((req, res) => {
             let body = '';
             req.on('data', chunk => { body += chunk; });
@@ -286,17 +295,21 @@ describe('reviewFileWithFallback — routing', () => {
             });
         });
         await new Promise(resolve => server.listen(0, resolve));
-        const port = server.address().port;
-        const baseUrl = `http://localhost:${port}`;
-        const nimClient = new NimClient(baseUrl, 'nim-key');
-        const clients = {
-            nim: nimClient,
-            mistral: null,
-        };
-        const chain = [
-            { id: 'nim-model', provider: 'nim' },
-        ];
-        await assert.rejects(() => reviewFileWithFallback(clients, 'test.ts', '+ line', chain, testConfig), /All models failed for test.ts/);
-        server.close();
+        try {
+            const port = server.address().port;
+            const baseUrl = `http://localhost:${port}`;
+            const nimClient = new NimClient(baseUrl, 'nim-key');
+            const clients = {
+                nim: nimClient,
+                mistral: null,
+            };
+            const chain = [
+                { id: 'nim-model', provider: 'nim' },
+            ];
+            await assert.rejects(() => reviewFileWithFallback(clients, 'test.ts', '+ line', chain, testConfig), /All models failed for test.ts/);
+        }
+        finally {
+            server.close();
+        }
     });
 });

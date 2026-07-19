@@ -115,23 +115,32 @@ export async function postComment(repo: string, prNumber: number, token: string,
 }
 
 async function findExistingComment(repo: string, prNumber: number, token: string): Promise<number | null> {
-  const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=100`;
-  const resp = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Accept': 'application/vnd.github+json',
-    },
-    signal: AbortSignal.timeout(30_000),
-  });
+  let page = 1;
+  const perPage = 100;
 
-  if (!resp.ok) return null;
+  while (true) {
+    const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=${perPage}&page=${page}`;
+    const resp = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github+json',
+      },
+      signal: AbortSignal.timeout(30_000),
+    });
 
-  const comments = await resp.json() as { id: number; body: string }[];
-  for (const comment of comments) {
-    if (comment.body.startsWith(COMMENT_MARKER)) {
-      return comment.id;
+    if (!resp.ok) return null;
+
+    const comments = await resp.json() as { id: number; body: string }[];
+    for (const comment of comments) {
+      if (comment.body.startsWith(COMMENT_MARKER)) {
+        return comment.id;
+      }
     }
+
+    if (comments.length < perPage) break;
+    page++;
   }
+
   return null;
 }
 

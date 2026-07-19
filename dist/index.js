@@ -3,7 +3,7 @@ import { NimClient } from './nim-client.js';
 import { loadConfig, fetchDiff, postComment } from './review.js';
 import { loadEvent } from './event.js';
 import { buildCombinedChain } from './model-chain.js';
-export const MISTRAL_BASE_URL = 'https://api.mistral.ai/v1';
+const MISTRAL_BASE_URL = 'https://api.mistral.ai/v1';
 function globMatch(str, pattern) {
     const regex = new RegExp('^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
     return regex.test(str);
