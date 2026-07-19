@@ -27737,9 +27737,8 @@ function prompts_languageForTemplate(filePath) {
 ;// CONCATENATED MODULE: ./src/review.ts
 
 
-const BASE_SYSTEM_PROMPT = (/* unused pure expression or super */ null && (`You are an expert senior software engineer performing a code review.
-Analyse the diff provided for bugs, security issues, performance
-problems, and style/readability concerns.
+const BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
+Analyse the diff provided for bugs, security issues, performance problems, and style/readability concerns.
 Respond in concise markdown. For each finding use:
 - **File:** path
 - **Severity:** Critical | Warning | Suggestion
@@ -27747,7 +27746,7 @@ Respond in concise markdown. For each finding use:
 - **Issue:** short description
 - **Suggestion:** how to fix
 
-If the code looks fine, say "No issues found."`));
+If the code looks fine, say "No issues found."`;
 function splitCSV(s) {
     return s.split(',').map(item => item.trim()).filter(item => item !== '');
 }
@@ -28174,15 +28173,15 @@ if (isMainModule) {
  *
  * Stable sort — preserves original order within same score.
  */
-function buildCombinedChain(nimModels, mistralModels, hasNimKey, hasMistralKey, customModel, hasCustomKey) {
+function buildCombinedChain(opts) {
     const chain = [];
-    if (hasNimKey) {
-        for (const id of nimModels) {
+    if (opts.hasNimKey) {
+        for (const id of opts.nimModels) {
             chain.push({ id, provider: 'nim' });
         }
     }
-    if (hasMistralKey) {
-        for (const id of mistralModels) {
+    if (opts.hasMistralKey) {
+        for (const id of opts.mistralModels) {
             chain.push({ id, provider: 'mistral' });
         }
     }
@@ -28193,8 +28192,8 @@ function buildCombinedChain(nimModels, mistralModels, hasNimKey, hasMistralKey, 
         return scoreB - scoreA;
     });
     // Prepend custom model — always tried first regardless of score
-    if (customModel && hasCustomKey) {
-        chain.unshift({ id: customModel, provider: 'custom' });
+    if (opts.customModel && opts.hasCustomConfig) {
+        chain.unshift({ id: opts.customModel, provider: 'custom' });
     }
     return chain;
 }
@@ -28205,40 +28204,24 @@ function buildCombinedChain(nimModels, mistralModels, hasNimKey, hasMistralKey, 
 
 
 
-function src_globMatch(str, pattern) {
-    const regex = new RegExp('^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
-    return regex.test(str);
-}
-function src_shouldExclude(filePath, patterns) {
-    for (const pat of patterns) {
-        if (src_globMatch(filePath, pat))
-            return true;
-        if (src_globMatch(filePath.split('/').pop() || '', pat))
-            return true;
-    }
-    return false;
-}
-const src_BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
-Analyse the diff provided for bugs, security issues, performance problems, and style/readability concerns.
-Respond in concise markdown with findings for each file. For each finding use:
-- **File:** path
-- **Severity:** Critical | Warning | Suggestion
-- **Line (approx):** number or range
-- **Issue:** short description
-- **Suggestion:** how to fix
-
-If the code looks fine, say "No issues found."`;
 async function run() {
     const config = loadConfig();
-    if (!config.apiKey && !config.mistralApiKey && !(config.customApiUrl && config.customModel)) {
+    const hasCustom = !!(config.customApiUrl && config.customModel);
+    if (!config.apiKey && !config.mistralApiKey && !hasCustom) {
         throw new Error('At least one of nim_api_key, mistral_api_key, or custom_api_url + custom_model is required');
     }
-    if (!config.apiKey && !config.mistralApiKey && config.customApiUrl && config.customModel) {
+    if (config.customApiUrl) {
+        const url = new URL(config.customApiUrl);
+        if (url.protocol !== 'https:' && !(url.protocol === 'http:' && (url.hostname === 'localhost' || url.hostname === '127.0.0.1'))) {
+            throw new Error('custom_api_url must use https:// (or http:// for localhost only)');
+        }
+    }
+    if (hasCustom && !config.apiKey && !config.mistralApiKey) {
         core.warning('Running with only custom API configured — no fallback chain available if custom model fails');
     }
     const nimClient = config.apiKey ? new NimClient(config.baseURL, config.apiKey) : null;
     const mistralClient = config.mistralApiKey ? new NimClient(config.mistralBaseUrl, config.mistralApiKey) : null;
-    const customClient = (config.customApiUrl && config.customModel)
+    const customClient = hasCustom
         ? new NimClient(config.customApiUrl, config.customApiKey)
         : null;
     const clients = {
@@ -28246,7 +28229,14 @@ async function run() {
         mistral: mistralClient,
         custom: customClient,
     };
-    const chain = buildCombinedChain(config.models, config.mistralModels, !!config.apiKey, !!config.mistralApiKey, config.customModel, !!(config.customApiUrl && config.customModel));
+    const chain = buildCombinedChain({
+        nimModels: config.models,
+        mistralModels: config.mistralModels,
+        hasNimKey: !!config.apiKey,
+        hasMistralKey: !!config.mistralApiKey,
+        customModel: config.customModel,
+        hasCustomConfig: hasCustom,
+    });
     const event = loadEvent();
     const prNumber = event.pull_request.number;
     const repo = process.env.GITHUB_REPOSITORY;
@@ -28269,7 +28259,7 @@ async function run() {
     const filenames = Object.keys(filesDiff).sort();
     const reviewableFiles = [];
     for (const filePath of filenames) {
-        if (!src_shouldExclude(filePath, config.excludePatterns)) {
+        if (!shouldExclude(filePath, config.excludePatterns)) {
             reviewableFiles.push(filePath);
         }
     }
@@ -28298,7 +28288,7 @@ async function run() {
         try {
             core.info(`Trying ${tagged.id} (${tagged.provider})...`);
             const result = await client.chat(tagged.id, [
-                { role: 'system', content: config.systemPrompt || src_BASE_SYSTEM_PROMPT },
+                { role: 'system', content: config.systemPrompt || BASE_SYSTEM_PROMPT },
                 { role: 'user', content: userMsg },
             ], { temperature: 0.2, maxTokens: 4096 });
             if (result.content && result.content.trim()) {
