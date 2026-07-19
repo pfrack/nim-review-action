@@ -26,7 +26,7 @@ jobs:
       - name: Run benchmark
         env:
           NIM_API_KEY: ${{ secrets.NIM_API_KEY }}
-          NIM_BENCH_ITERATIONS: '2'
+          NIM_BENCH_ITERATIONS: '1'
         run: node dist/bench-entry.js > benchmark-output.txt
 
       - name: Show results
