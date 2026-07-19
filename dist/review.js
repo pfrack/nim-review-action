@@ -88,7 +88,8 @@ export async function postComment(repo, prNumber, token, body) {
 async function findExistingComment(repo, prNumber, token) {
     let page = 1;
     const perPage = 100;
-    while (true) {
+    const maxPages = 10;
+    while (page <= maxPages) {
         const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=${perPage}&page=${page}`;
         const resp = await fetch(url, {
             headers: {

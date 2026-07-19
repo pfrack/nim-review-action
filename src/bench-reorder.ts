@@ -170,10 +170,10 @@ const TARGET_CONFIG: Record<ActionTarget, { pattern: RegExp; label: string }> = 
  */
 export function updateActionYml(actionPath: string, orderedModels: string[], target: ActionTarget = 'nim_models'): void {
   const content = readFileSync(actionPath, 'utf-8');
-  const modelString = orderedModels.join(',').replace(/\$/g, '$$');
+  const modelString = orderedModels.join(',');
   const config = TARGET_CONFIG[target];
 
-  const updated = content.replace(config.pattern, `$1${modelString}$3`);
+  const updated = content.replace(config.pattern, (_, p1: string, _p2: string, p3: string) => p1 + modelString + p3);
 
   if (updated === content) {
     console.warn(`Warning: could not find ${config.label} default in action.yml, no changes made`);
