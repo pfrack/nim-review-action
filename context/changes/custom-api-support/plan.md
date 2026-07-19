@@ -217,8 +217,8 @@ No performance impact — the custom model is one additional attempt at position
 
 #### Automated
 
-- [ ] 3.1 TypeScript compiles: `npm run build`
-- [ ] 3.2 Tests pass: `npm test`
+- [x] 3.1 TypeScript compiles: `npm run build`
+- [x] 3.2 Tests pass: `npm test`
 
 #### Manual
 
