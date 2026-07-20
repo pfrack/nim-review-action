@@ -12,6 +12,7 @@ jobs:
   review:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: ./
         with:
           nim_api_key: ${{ secrets.NIM_API_KEY }}
