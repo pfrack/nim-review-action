@@ -74,7 +74,11 @@ async function run(): Promise<void> {
   } catch (err) {
     if (err instanceof Error && err.message.startsWith('Diff too large')) {
       const msg = `### AI Code Review\n\n${err.message}`;
-      await postComment(repo, prNumber, token, msg);
+      try {
+        await postComment(repo, prNumber, token, msg);
+      } catch (postErr) {
+        core.warning(`Failed to post diff-too-large comment: ${postErr}`);
+      }
       return;
     }
     throw err;
@@ -161,11 +165,12 @@ async function run(): Promise<void> {
         const truncated = result.content.length > 500
           ? '...' + result.content.slice(-500)
           : result.content;
+        const errorSummary = parsed.error.issues.slice(0, 3).map(i => `- ${i.path.join('.')}: ${i.message}`).join('\n');
         const retryResult = await client.chat(tagged.id, [
           { role: 'system', content: config.systemPrompt || BASE_SYSTEM_PROMPT },
           { role: 'user', content: userMsg },
           { role: 'assistant', content: truncated },
-          { role: 'user', content: `Your previous response was not valid JSON matching the required schema. ${parsed.error.issues.length} validation error(s) occurred.\nPlease respond with valid JSON matching the schema.` },
+          { role: 'user', content: `Your previous response was not valid JSON matching the required schema. ${parsed.error.issues.length} validation error(s) occurred:\n${errorSummary}\nPlease respond with valid JSON matching the schema.` },
         ], {
           temperature: 0.2,
           maxTokens: 4096,

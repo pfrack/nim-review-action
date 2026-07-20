@@ -15,7 +15,8 @@ export async function withRetry<T>(fn: () => Promise<T>, maxRetries = 2, delayMs
     } catch (error) {
       lastError = error;
       const status = error instanceof RetryableError ? error.status : 0;
-      const isFetchNetworkError = error instanceof TypeError && /fetch|network|ECONNREFUSED|ETIMEDOUT/i.test(error.message);
+      const isFetchNetworkError = error instanceof TypeError &&
+        /fetch|network|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|ECONNRESET/i.test(error.message);
       if (i < maxRetries && (status >= 500 || status === 429 || isFetchNetworkError)) {
         const delay = Math.min(delayMs * Math.pow(2, i), 30_000);
         await new Promise((resolve) => setTimeout(resolve, delay));

@@ -108,6 +108,10 @@ export function validateFindings(
       warnings.push(`Warning: finding has line_end but no line_start in "${f.file}", dropping`);
       continue;
     }
+    if (f.line_start != null && f.line_end != null && f.line_end < f.line_start) {
+      warnings.push(`Warning: finding line_end (${f.line_end}) < line_start (${f.line_start}) in "${f.file}", dropping`);
+      continue;
+    }
     if (f.line_start != null) {
       const fileHunks = hunks.get(f.file) || [];
       const overlaps = fileHunks.some(h => f.line_start! <= h.end && (f.line_end ?? f.line_start!) >= h.start);
