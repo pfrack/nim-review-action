@@ -135,8 +135,3 @@ export function languageForFile(filePath: string): string {
     default: return 'generic';
   }
 }
-
-export function languageForTemplate(filePath: string): string {
-  const lang = languageForFile(filePath);
-  return languagePrompts[lang] ?? '';
-}

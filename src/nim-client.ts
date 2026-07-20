@@ -1,3 +1,6 @@
+import * as core from '@actions/core';
+import { withRetry, RetryableError } from './retry.js';
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -100,23 +103,26 @@ export class NimClient {
     }
 
     const start = Date.now();
-    const resp = await fetch(`${this.baseURL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(180_000),
-    });
+    const resp = await withRetry(async () => {
+      const response = await fetch(`${this.baseURL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(180_000),
+      });
 
-    if (!resp.ok) {
-      const body = await resp.text();
-      const provider = this.baseURL.includes('nvidia.com') ? 'NIM' :
-                       this.baseURL.includes('mistral') ? 'Mistral' :
-                       this.baseURL.split('/')[2] || 'API';
-      throw new Error(`${provider} returned ${resp.status}: ${body}`);
-    }
+      if (!response.ok) {
+        const body = await response.text();
+        const provider = this.baseURL.includes('nvidia.com') ? 'NIM' :
+                         this.baseURL.includes('mistral') ? 'Mistral' :
+                         this.baseURL.split('/')[2] || 'API';
+        throw new RetryableError(`${provider} returned ${response.status}: ${body}`, response.status);
+      }
+      return response;
+    });
 
     const data = await resp.json() as ChatResponse;
     if (!data.choices || data.choices.length === 0) {
@@ -130,6 +136,7 @@ export class NimClient {
       try {
         content = JSON.stringify(JSON.parse(args));
       } catch {
+        core.info(`Tool call arguments not valid JSON, using raw string (${args.length} chars)`);
         content = args;
       }
     } else {
@@ -153,24 +160,23 @@ export class NimClient {
       stream: true,
     };
 
-    const resp = await fetch(`${this.baseURL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-        'Accept': 'text/event-stream',
-      },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(180_000),
+    const resp = await withRetry(async () => {
+      const r = await fetch(`${this.baseURL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(180_000),
+      });
+      if (!r.ok) {
+        const body = await r.text();
+        throw new RetryableError(`${r.status}: ${body}`, r.status);
+      }
+      return r;
     });
-
-    if (!resp.ok) {
-      const body = await resp.text();
-      const provider = this.baseURL.includes('nvidia.com') ? 'NIM' :
-                       this.baseURL.includes('mistral') ? 'Mistral' :
-                       this.baseURL.split('/')[2] || 'API';
-      throw new Error(`${provider} returned ${resp.status}: ${body}`);
-    }
 
     const reader = resp.body!.getReader();
     const decoder = new TextDecoder();

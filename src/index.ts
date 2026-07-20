@@ -160,7 +160,7 @@ async function run(): Promise<void> {
           { role: 'system', content: config.systemPrompt || BASE_SYSTEM_PROMPT },
           { role: 'user', content: userMsg },
           { role: 'assistant', content: result.content },
-          { role: 'user', content: `Your previous response was not valid JSON matching the required schema. Errors: ${parsed.error.message}\nPlease respond with valid JSON matching the schema.` },
+          { role: 'user', content: `Your previous response was not valid JSON matching the required schema. ${parsed.error.issues.length} validation error(s) occurred.\nPlease respond with valid JSON matching the schema.` },
         ], {
           temperature: 0.2,
           maxTokens: 4096,
@@ -202,7 +202,7 @@ async function run(): Promise<void> {
   } else if (!usedModel) {
     sections.push(`\nNo review content returned from any model.`);
   } else if (config.promptMode === 'replace' && lastRawContent) {
-    sections.push(`\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n${lastRawContent}`);
+    sections.push(`\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\n${lastRawContent}\n\`\`\``);
   } else {
     sections.push(`\nNo issues found.`);
   }

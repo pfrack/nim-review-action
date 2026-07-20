@@ -17,7 +17,33 @@ export const ReviewSchema = z.object({
 export type ReviewFinding = z.infer<typeof ReviewFindingSchema>;
 export type ReviewType = z.infer<typeof ReviewSchema>;
 
-export const ReviewJsonSchema = z.toJSONSchema(ReviewSchema);
+// Hand-written JSON Schema for maximum provider compatibility.
+// z.toJSONSchema() adds "$schema" draft metadata and uses "anyOf" for
+// nullable fields — both of which some LLM providers reject.
+export const ReviewJsonSchema = {
+  type: 'object',
+  properties: {
+    findings: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          file: { type: 'string' },
+          severity: { type: 'string', enum: ['Critical', 'Warning', 'Suggestion'] },
+          line_start: { type: ['number', 'null'] },
+          line_end: { type: ['number', 'null'] },
+          issue: { type: 'string' },
+          suggestion: { type: ['string', 'null'] },
+        },
+        required: ['file', 'severity', 'issue'],
+        additionalProperties: false,
+      },
+    },
+    summary: { type: ['string', 'null'] },
+  },
+  required: ['findings'],
+  additionalProperties: false,
+};
 
 export const JSON_SCHEMA_DEFINITION =
   'Respond in JSON matching this schema: ```json\n' +

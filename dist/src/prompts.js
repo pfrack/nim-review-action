@@ -1,4 +1,5 @@
 import { extname } from 'node:path';
+import { JSON_SCHEMA_DEFINITION } from './review-schema.js';
 const languagePrompts = {
     go: `You are an expert senior software engineer performing a code review of Go code.
 
@@ -17,14 +18,7 @@ Go-specific focus areas:
 - Performance: unnecessary allocations, string concatenation in loops
 - Effective use of context for cancellation and timeouts
 
-Respond in concise markdown. For each finding use:
-- **File:** path
-- **Severity:** Critical | Warning | Suggestion
-- **Line (approx):** number or range
-- **Issue:** short description
-- **Suggestion:** how to fix
-
-If the code looks fine, say "No issues found."`,
+${JSON_SCHEMA_DEFINITION}`,
     python: `You are an expert senior software engineer performing a code review of Python code.
 
 Analyse the diff provided for bugs, security issues, performance
@@ -42,14 +36,7 @@ Python-specific focus areas:
 - Import cycles and circular dependencies
 - Pythonic idioms vs anti-patterns
 
-Respond in concise markdown. For each finding use:
-- **File:** path
-- **Severity:** Critical | Warning | Suggestion
-- **Line (approx):** number or range
-- **Issue:** short description
-- **Suggestion:** how to fix
-
-If the code looks fine, say "No issues found."`,
+${JSON_SCHEMA_DEFINITION}`,
     typescript: `You are an expert senior software engineer performing a code review of TypeScript/JavaScript code.
 
 Analyse the diff provided for bugs, security issues, performance
@@ -67,14 +54,7 @@ TypeScript/JavaScript-specific focus areas:
 - Module import/export patterns
 - React-specific: useEffect cleanup, memo usage, key props
 
-Respond in concise markdown. For each finding use:
-- **File:** path
-- **Severity:** Critical | Warning | Suggestion
-- **Line (approx):** number or range
-- **Issue:** short description
-- **Suggestion:** how to fix
-
-If the code looks fine, say "No issues found."`,
+${JSON_SCHEMA_DEFINITION}`,
     java: `You are an expert senior software engineer performing a code review of Java code.
 
 Analyse the diff provided for bugs, security issues, performance
@@ -92,14 +72,7 @@ Java-specific focus areas:
 - Stream API vs traditional loops performance
 - Dependency injection and lifecycle management
 
-Respond in concise markdown. For each finding use:
-- **File:** path
-- **Severity:** Critical | Warning | Suggestion
-- **Line (approx):** number or range
-- **Issue:** short description
-- **Suggestion:** how to fix
-
-If the code looks fine, say "No issues found."`,
+${JSON_SCHEMA_DEFINITION}`,
     rust: `You are an expert senior software engineer performing a code review of Rust code.
 
 Analyse the diff provided for bugs, security issues, performance
@@ -117,14 +90,7 @@ Rust-specific focus areas:
 - FFI safety and memory management
 - Clippy warnings and idiomatic Rust patterns
 
-Respond in concise markdown. For each finding use:
-- **File:** path
-- **Severity:** Critical | Warning | Suggestion
-- **Line (approx):** number or range
-- **Issue:** short description
-- **Suggestion:** how to fix
-
-If the code looks fine, say "No issues found."`,
+${JSON_SCHEMA_DEFINITION}`,
     cpp: `You are an expert senior software engineer performing a code review of C/C++ code.
 
 Analyse the diff provided for bugs, security issues, performance
@@ -142,14 +108,7 @@ C/C++-specific focus areas:
 - Template metaprogramming pitfalls
 - C-style casts vs C++ casts, const correctness
 
-Respond in concise markdown. For each finding use:
-- **File:** path
-- **Severity:** Critical | Warning | Suggestion
-- **Line (approx):** number or range
-- **Issue:** short description
-- **Suggestion:** how to fix
-
-If the code looks fine, say "No issues found."`,
+${JSON_SCHEMA_DEFINITION}`,
 };
 export function languageForFile(filePath) {
     const ext = extname(filePath).toLowerCase();
@@ -168,8 +127,4 @@ export function languageForFile(filePath) {
         case '.hpp': return 'cpp';
         default: return 'generic';
     }
-}
-export function languageForTemplate(filePath) {
-    const lang = languageForFile(filePath);
-    return languagePrompts[lang] ?? '';
 }

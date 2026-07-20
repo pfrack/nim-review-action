@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { parseDiff, shouldExclude, resolveSystemPrompt, loadConfig, parseDiffHunks, getFileHunks, validateFindings, renderReview, type Config } from './review.js';
+import { parseDiff, shouldExclude, loadConfig, parseDiffHunks, getFileHunks, validateFindings, renderReview, type Config } from './review.js';
 
 describe('parseDiff', () => {
   it('splits multi-file diffs', () => {
@@ -48,66 +48,6 @@ describe('shouldExclude', () => {
       assert.strictEqual(shouldExclude(tt.filepath, tt.patterns), tt.want);
     });
   }
-});
-
-describe('resolveSystemPrompt', () => {
-  const baseConfig: Config = {
-    baseURL: '',
-    apiKey: '',
-    models: [],
-    mistralApiKey: '',
-    mistralBaseUrl: '',
-    mistralModels: [],
-    customApiUrl: '',
-    customModel: '',
-    customApiKey: '',
-    maxFiles: 15,
-    excludePatterns: [],
-    systemPrompt: '',
-    promptMode: 'append',
-  };
-
-  it('returns base prompt when no env and no lang match', () => {
-    const prompt = resolveSystemPrompt('config.yaml', baseConfig);
-    assert.ok(prompt.includes('code review'));
-    assert.ok(prompt.includes('findings'));
-  });
-
-  it('returns lang prompt when no env and lang matches', () => {
-    const prompt = resolveSystemPrompt('main.go', baseConfig);
-    assert.ok(prompt.includes('Go code'));
-    assert.ok(prompt.includes('Goroutine'));
-  });
-
-  it('returns env prompt in replace mode', () => {
-    const prompt = resolveSystemPrompt('main.go', {
-      ...baseConfig,
-      systemPrompt: 'You are a security auditor.',
-      promptMode: 'replace',
-    });
-    assert.strictEqual(prompt, 'You are a security auditor.');
-  });
-
-  it('appends env prompt to lang template in append mode', () => {
-    const prompt = resolveSystemPrompt('app.py', {
-      ...baseConfig,
-      systemPrompt: 'Focus on security.',
-      promptMode: 'append',
-    });
-    assert.ok(prompt.includes('Focus on security.'));
-    assert.ok(prompt.includes('Python code'));
-    assert.ok(prompt.includes('Mutable default'));
-  });
-
-  it('appends env prompt to base when no lang match', () => {
-    const prompt = resolveSystemPrompt('config.yaml', {
-      ...baseConfig,
-      systemPrompt: 'Focus on security.',
-      promptMode: 'append',
-    });
-    assert.ok(prompt.includes('Focus on security.'));
-    assert.ok(prompt.includes('code review'));
-  });
 });
 
 describe('loadConfig — mistral fields', () => {

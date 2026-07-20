@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
-import { languageForTemplate } from './prompts.js';
 import { JSON_SCHEMA_DEFINITION, type ReviewType } from './review-schema.js';
+import { withRetry, RetryableError } from './retry.js';
 
 export const BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
 Analyse the diff provided for bugs, security issues, performance problems, and style/readability concerns.
@@ -176,20 +176,33 @@ export function shouldExclude(filePath: string, patterns: string[]): boolean {
 
 export async function fetchDiff(repo: string, prNumber: number, token: string): Promise<Record<string, string>> {
   const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}`;
-  const resp = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Accept': 'application/vnd.github.v3.diff',
-    },
-    signal: AbortSignal.timeout(30_000),
+  const resp = await withRetry(async () => {
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github.v3.diff',
+      },
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+    }
+    return response;
   });
 
-  if (!resp.ok) {
-    const body = await resp.text();
-    throw new Error(`GitHub API returned ${resp.status}: ${body}`);
+  const contentLength = resp.headers.get('content-length');
+  if (contentLength && parseInt(contentLength, 10) > 5 * 1024 * 1024) {
+    core.warning(`Diff too large (${(parseInt(contentLength, 10) / 1024 / 1024).toFixed(1)} MB). Skipping review.`);
+    return {};
   }
 
   const raw = await resp.text();
+  if (raw.length > 5 * 1024 * 1024) {
+    core.warning(`Diff too large (${(raw.length / 1024 / 1024).toFixed(1)} MB after download). Skipping review.`);
+    return {};
+  }
   return parseDiff(raw);
 }
 
@@ -209,19 +222,25 @@ export async function postComment(repo: string, prNumber: number, token: string,
 async function findExistingComment(repo: string, prNumber: number, token: string): Promise<number | null> {
   let page = 1;
   const perPage = 100;
-  const maxPages = 10;
+  const maxPages = 50;
 
   while (page <= maxPages) {
     const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments?per_page=${perPage}&page=${page}`;
-    const resp = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/vnd.github+json',
-      },
-      signal: AbortSignal.timeout(30_000),
-    });
+    const resp = await withRetry(async () => {
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github+json',
+        },
+        signal: AbortSignal.timeout(30_000),
+      });
 
-    if (!resp.ok) return null;
+      if (!response.ok) {
+        const body = await response.text();
+        throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+      }
+      return response;
+    });
 
     const comments = await resp.json() as { id: number; body: string }[];
     for (const comment of comments) {
@@ -239,15 +258,23 @@ async function findExistingComment(repo: string, prNumber: number, token: string
 
 async function updateComment(repo: string, commentId: number, token: string, body: string): Promise<void> {
   const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
-  const resp = await fetch(url, {
-    method: 'PATCH',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'Accept': 'application/vnd.github+json',
-    },
-    body: JSON.stringify({ body }),
-    signal: AbortSignal.timeout(30_000),
+  const resp = await withRetry(async () => {
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/vnd.github+json',
+      },
+      body: JSON.stringify({ body }),
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+    }
+    return response;
   });
 
   if (!resp.ok) {
@@ -258,37 +285,27 @@ async function updateComment(repo: string, commentId: number, token: string, bod
 
 async function createComment(repo: string, prNumber: number, token: string, body: string): Promise<void> {
   const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments`;
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'Accept': 'application/vnd.github+json',
-    },
-    body: JSON.stringify({ body }),
-    signal: AbortSignal.timeout(30_000),
+  const resp = await withRetry(async () => {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/vnd.github+json',
+      },
+      body: JSON.stringify({ body }),
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+    }
+    return response;
   });
 
   if (!resp.ok) {
     const respBody = await resp.text();
     throw new Error(`GitHub API returned ${resp.status}: ${respBody}`);
   }
-}
-
-export function resolveSystemPrompt(filePath: string, config: Config): string {
-  const langTemplate = languageForTemplate(filePath);
-
-  if (!config.systemPrompt) {
-    return langTemplate || BASE_SYSTEM_PROMPT;
-  }
-
-  if (config.promptMode === 'replace') {
-    return config.systemPrompt;
-  }
-
-  // append mode
-  if (langTemplate) {
-    return config.systemPrompt + '\n\n' + langTemplate;
-  }
-  return config.systemPrompt + '\n\n' + BASE_SYSTEM_PROMPT;
 }
