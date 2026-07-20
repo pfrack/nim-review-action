@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import { NimClient, type ResponseFormat } from './nim-client.js';
-import { loadConfig, fetchDiff, postComment, shouldExclude, BASE_SYSTEM_PROMPT } from './review.js';
+import { loadConfig, fetchDiff, postComment, shouldExclude, validateFindings, BASE_SYSTEM_PROMPT } from './review.js';
 import { loadEvent } from './event.js';
 import { buildCombinedChain, type Provider } from './model-chain.js';
 import { ReviewSchema, ReviewJsonSchema, type ReviewType } from './review-schema.js';
@@ -214,6 +214,10 @@ async function run(): Promise<void> {
       }
 
       review = parsed.data;
+      const changedFiles = new Set(reviewableFiles);
+      const validated = validateFindings(review, filesDiff, changedFiles);
+      for (const w of validated.warnings) core.warning(w);
+      review = validated.valid;
       usedModel = tagged.id;
       core.info(`Done with ${tagged.id} (${tagged.provider})`);
       break;

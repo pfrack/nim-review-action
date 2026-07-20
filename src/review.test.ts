@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { createServer, type Server } from 'node:http';
-import { parseDiff, shouldExclude, resolveSystemPrompt, loadConfig, reviewFileWithFallback, type Config } from './review.js';
+import { parseDiff, shouldExclude, resolveSystemPrompt, loadConfig, reviewFileWithFallback, parseDiffHunks, getFileHunks, validateFindings, type Config } from './review.js';
 import { type TaggedModel, type Provider } from './model-chain.js';
 import { NimClient } from './nim-client.js';
 
@@ -431,5 +431,93 @@ describe('reviewFileWithFallback — routing', () => {
     } finally {
       server.close();
     }
+  });
+});
+
+describe('parseDiffHunks', () => {
+  it('extracts hunk ranges from diff text', () => {
+    const diff = `diff --git a/foo.ts b/foo.ts
+--- a/foo.ts
++++ b/foo.ts
+@@ -1,3 +1,4 @@
+ line1
++line2
+ line3
+@@ -10,5 +11,6 @@
+ old
++new
+ old2`;
+    const hunks = parseDiffHunks(diff);
+    assert.strictEqual(hunks.length, 2);
+    assert.deepStrictEqual(hunks[0], { start: 1, end: 4 });
+    assert.deepStrictEqual(hunks[1], { start: 11, end: 16 });
+  });
+
+  it('returns empty array for no hunks', () => {
+    assert.deepStrictEqual(parseDiffHunks('no hunks here'), []);
+  });
+});
+
+describe('getFileHunks', () => {
+  it('maps files to their hunk ranges', () => {
+    const filesDiff: Record<string, string> = {
+      'a.ts': 'diff --git a/a.ts b/a.ts\n@@ -1,2 +1,3 @@\n+x\n',
+      'b.ts': 'diff --git b/b.ts b/b.ts\n@@ -5,1 +5,2 @@\n+y\n',
+    };
+    const map = getFileHunks(filesDiff);
+    assert.strictEqual(map.size, 2);
+    assert.deepStrictEqual(map.get('a.ts'), [{ start: 1, end: 3 }]);
+    assert.deepStrictEqual(map.get('b.ts'), [{ start: 5, end: 6 }]);
+  });
+});
+
+describe('validateFindings', () => {
+  const filesDiff: Record<string, string> = {
+    'src/main.ts': 'diff --git a/src/main.ts b/src/main.ts\n@@ -10,3 +10,5 @@\n old\n+new1\n+new2\n old2\n',
+  };
+  const changedFiles = new Set(['src/main.ts']);
+
+  it('drops finding for file not in changed set', () => {
+    const review = { findings: [{ file: 'unknown.ts', severity: 'Warning' as const, issue: 'bad', line_start: 11, line_end: 12 }] };
+    const result = validateFindings(review, filesDiff, changedFiles);
+    assert.strictEqual(result.valid.findings.length, 1); // warning finding inserted
+    assert.ok(result.warnings.some(w => w.includes('unknown.ts')));
+  });
+
+  it('drops finding with line outside all hunks', () => {
+    const review = { findings: [{ file: 'src/main.ts', severity: 'Critical' as const, issue: 'bad', line_start: 100, line_end: 105 }] };
+    const result = validateFindings(review, filesDiff, changedFiles);
+    assert.strictEqual(result.valid.findings.length, 1); // warning finding
+    assert.ok(result.warnings.some(w => w.includes('100')));
+  });
+
+  it('keeps finding with line inside hunk', () => {
+    const review = { findings: [{ file: 'src/main.ts', severity: 'Warning' as const, issue: 'ok', line_start: 11, line_end: 12 }] };
+    const result = validateFindings(review, filesDiff, changedFiles);
+    assert.strictEqual(result.valid.findings.length, 1);
+    assert.strictEqual(result.valid.findings[0].issue, 'ok');
+    assert.strictEqual(result.warnings.length, 0);
+  });
+
+  it('keeps file-wide finding (no line)', () => {
+    const review = { findings: [{ file: 'src/main.ts', severity: 'Suggestion' as const, issue: 'no tests' }] };
+    const result = validateFindings(review, filesDiff, changedFiles);
+    assert.strictEqual(result.valid.findings.length, 1);
+    assert.strictEqual(result.warnings.length, 0);
+  });
+
+  it('inserts warning finding when all findings dropped', () => {
+    const review = { findings: [{ file: 'nope.ts', severity: 'Warning' as const, issue: 'x' }] };
+    const result = validateFindings(review, filesDiff, changedFiles);
+    assert.strictEqual(result.valid.findings.length, 1);
+    assert.strictEqual(result.valid.findings[0].file, '<global>');
+    assert.ok(result.warnings.length > 0);
+  });
+
+  it('returns empty valid finding for clean review with summary', () => {
+    const review = { findings: [{ file: 'nope.ts', severity: 'Warning' as const, issue: 'x' }], summary: 'All good' };
+    const result = validateFindings(review, filesDiff, changedFiles);
+    assert.strictEqual(result.valid.findings.length, 0);
+    assert.strictEqual(result.valid.summary, 'All good');
   });
 });

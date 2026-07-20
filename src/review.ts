@@ -2,7 +2,7 @@ import * as core from '@actions/core';
 import { NimClient, type ChatMessage } from './nim-client.js';
 import { type TaggedModel, type Provider } from './model-chain.js';
 import { languageForTemplate } from './prompts.js';
-import { JSON_SCHEMA_DEFINITION } from './review-schema.js';
+import { JSON_SCHEMA_DEFINITION, type ReviewType } from './review-schema.js';
 
 export const BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
 Analyse the diff provided for bugs, security issues, performance problems, and style/readability concerns.
@@ -67,6 +67,66 @@ export function parseDiff(raw: string): Record<string, string> {
   }
 
   return files;
+}
+
+const hunkHeaderRe = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
+
+export function parseDiffHunks(diffText: string): Array<{ start: number; end: number }> {
+  const ranges: Array<{ start: number; end: number }> = [];
+  for (const line of diffText.split('\n')) {
+    const m = line.match(hunkHeaderRe);
+    if (m) {
+      const start = parseInt(m[1], 10);
+      const count = m[2] ? parseInt(m[2], 10) : 1;
+      ranges.push({ start, end: start + count - 1 });
+    }
+  }
+  return ranges;
+}
+
+export function getFileHunks(filesDiff: Record<string, string>): Map<string, Array<{ start: number; end: number }>> {
+  const map = new Map<string, Array<{ start: number; end: number }>>();
+  for (const [file, diffText] of Object.entries(filesDiff)) {
+    map.set(file, parseDiffHunks(diffText));
+  }
+  return map;
+}
+
+export function validateFindings(
+  review: ReviewType,
+  filesDiff: Record<string, string>,
+  changedFiles: Set<string>,
+): { valid: ReviewType; warnings: string[] } {
+  const warnings: string[] = [];
+  const hunks = getFileHunks(filesDiff);
+  const validFindings: typeof review.findings = [];
+
+  for (const f of review.findings) {
+    if (!changedFiles.has(f.file)) {
+      warnings.push(`Warning: finding references unknown file "${f.file}", dropping`);
+      continue;
+    }
+    if (f.line_start != null) {
+      const fileHunks = hunks.get(f.file) || [];
+      const overlaps = fileHunks.some(h => f.line_start! <= h.end && (f.line_end ?? f.line_start!) >= h.start);
+      if (!overlaps) {
+        warnings.push(`Warning: finding line ${f.line_start} outside changed hunks in "${f.file}", dropping`);
+        continue;
+      }
+    }
+    validFindings.push(f);
+  }
+
+  if (validFindings.length === 0 && !review.summary) {
+    validFindings.push({
+      file: '<global>',
+      severity: 'Suggestion' as const,
+      issue: 'All findings were invalid — see model output for context',
+      suggestion: null,
+    });
+  }
+
+  return { valid: { findings: validFindings, summary: review.summary }, warnings };
 }
 
 function globMatch(str: string, pattern: string): boolean {
