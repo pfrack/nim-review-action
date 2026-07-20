@@ -3,21 +3,11 @@ import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ReviewSchema } from './review-schema.js';
+import { safeParseJson } from './utils.js';
 const fixturesDir = join(import.meta.dirname, '__fixtures__');
 function loadFixture(name) {
     const raw = readFileSync(join(fixturesDir, name), 'utf-8');
     return JSON.parse(raw);
-}
-function safeParseJson(content) {
-    const trimmed = content.trim();
-    if (!trimmed)
-        return undefined;
-    try {
-        return JSON.parse(trimmed);
-    }
-    catch {
-        return undefined;
-    }
 }
 describe('ReviewSchema', () => {
     it('parses valid complete response', () => {

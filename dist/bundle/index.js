@@ -27459,7 +27459,6 @@ async function withRetry(fn, maxRetries = 2, delayMs = 1000) {
 
 ;// CONCATENATED MODULE: ./src/nim-client.ts
 
-
 class NimClient {
     baseURL;
     apiKey;
@@ -27522,14 +27521,7 @@ class NimClient {
         const choice = data.choices[0];
         let content;
         if (choice.message?.tool_calls && choice.message.tool_calls.length > 0) {
-            const args = choice.message.tool_calls[0].function.arguments;
-            try {
-                content = JSON.stringify(JSON.parse(args));
-            }
-            catch {
-                lib_core.info(`Tool call arguments not valid JSON, using raw string (${args.length} chars)`);
-                content = args;
-            }
+            content = choice.message.tool_calls[0].function.arguments;
         }
         else {
             content = (choice.message?.content ?? '').trim();
@@ -35405,7 +35397,6 @@ const JSON_SCHEMA_DEFINITION = 'Respond in JSON matching this schema: ```json\n'
     JSON.stringify(ReviewJsonSchema) +
     '\n```\n' +
     'Include a "findings" array. If the code looks fine, respond with an empty findings array.';
-const codeReviewSchemaDef = (/* unused pure expression or super */ null && (JSON_SCHEMA_DEFINITION));
 
 ;// CONCATENATED MODULE: ./src/review.ts
 
@@ -35930,13 +35921,7 @@ function buildCombinedChain(opts) {
     return chain;
 }
 
-;// CONCATENATED MODULE: ./src/index.ts
-
-
-
-
-
-
+;// CONCATENATED MODULE: ./src/utils.ts
 function safeParseJson(content) {
     const trimmed = content.trim();
     if (!trimmed)
@@ -35948,6 +35933,15 @@ function safeParseJson(content) {
         return undefined;
     }
 }
+
+;// CONCATENATED MODULE: ./src/index.ts
+
+
+
+
+
+
+
 async function run() {
     const config = loadConfig();
     const hasCustom = !!(config.customApiUrl && config.customModel);

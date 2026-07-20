@@ -42,4 +42,3 @@ export const JSON_SCHEMA_DEFINITION = 'Respond in JSON matching this schema: ```
     JSON.stringify(ReviewJsonSchema) +
     '\n```\n' +
     'Include a "findings" array. If the code looks fine, respond with an empty findings array.';
-export const codeReviewSchemaDef = JSON_SCHEMA_DEFINITION;

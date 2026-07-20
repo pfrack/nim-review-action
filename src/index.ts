@@ -4,16 +4,7 @@ import { loadConfig, fetchDiff, postComment, shouldExclude, validateFindings, re
 import { loadEvent } from './event.js';
 import { buildCombinedChain, type Provider } from './model-chain.js';
 import { ReviewSchema, ReviewJsonSchema, type ReviewType } from './review-schema.js';
-
-function safeParseJson(content: string): unknown {
-  const trimmed = content.trim();
-  if (!trimmed) return undefined;
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    return undefined;
-  }
-}
+import { safeParseJson } from './utils.js';
 
 async function run(): Promise<void> {
   const config = loadConfig();

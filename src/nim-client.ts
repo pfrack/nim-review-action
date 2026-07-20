@@ -132,13 +132,7 @@ export class NimClient {
     const choice = data.choices[0];
     let content: string;
     if (choice.message?.tool_calls && choice.message.tool_calls.length > 0) {
-      const args = choice.message.tool_calls[0].function.arguments;
-      try {
-        content = JSON.stringify(JSON.parse(args));
-      } catch {
-        core.info(`Tool call arguments not valid JSON, using raw string (${args.length} chars)`);
-        content = args;
-      }
+      content = choice.message.tool_calls[0].function.arguments;
     } else {
       content = (choice.message?.content ?? '').trim();
     }

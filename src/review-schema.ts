@@ -51,4 +51,4 @@ export const JSON_SCHEMA_DEFINITION =
   '\n```\n' +
   'Include a "findings" array. If the code looks fine, respond with an empty findings array.';
 
-export const codeReviewSchemaDef = JSON_SCHEMA_DEFINITION;
+

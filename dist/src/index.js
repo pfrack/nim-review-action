@@ -4,17 +4,7 @@ import { loadConfig, fetchDiff, postComment, shouldExclude, validateFindings, re
 import { loadEvent } from './event.js';
 import { buildCombinedChain } from './model-chain.js';
 import { ReviewSchema, ReviewJsonSchema } from './review-schema.js';
-function safeParseJson(content) {
-    const trimmed = content.trim();
-    if (!trimmed)
-        return undefined;
-    try {
-        return JSON.parse(trimmed);
-    }
-    catch {
-        return undefined;
-    }
-}
+import { safeParseJson } from './utils.js';
 async function run() {
     const config = loadConfig();
     const hasCustom = !!(config.customApiUrl && config.customModel);
