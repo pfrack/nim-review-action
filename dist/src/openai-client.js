@@ -61,7 +61,12 @@ export class OpenAIClient {
         const choice = data.choices[0];
         let content;
         if (choice.message?.tool_calls && choice.message.tool_calls.length > 0) {
-            content = choice.message.tool_calls[0].function.arguments;
+            // Use the first tool call's arguments (we specify tool_choice to force a single tool)
+            const toolCall = choice.message.tool_calls[0];
+            if (!toolCall.function?.arguments) {
+                throw new Error('Tool call missing arguments');
+            }
+            content = toolCall.function.arguments;
         }
         else {
             content = (choice.message?.content ?? '').trim();
