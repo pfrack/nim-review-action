@@ -77,7 +77,10 @@ export class NimClient {
 
     if (!resp.ok) {
       const body = await resp.text();
-      throw new Error(`NIM returned ${resp.status}: ${body}`);
+      const provider = this.baseURL.includes('nvidia.com') ? 'NIM' :
+                       this.baseURL.includes('mistral') ? 'Mistral' :
+                       this.baseURL.split('/')[2] || 'API';
+      throw new Error(`${provider} returned ${resp.status}: ${body}`);
     }
 
     const data = await resp.json() as ChatResponse;
@@ -114,7 +117,10 @@ export class NimClient {
 
     if (!resp.ok) {
       const body = await resp.text();
-      throw new Error(`NIM returned ${resp.status}: ${body}`);
+      const provider = this.baseURL.includes('nvidia.com') ? 'NIM' :
+                       this.baseURL.includes('mistral') ? 'Mistral' :
+                       this.baseURL.split('/')[2] || 'API';
+      throw new Error(`${provider} returned ${resp.status}: ${body}`);
     }
 
     const reader = resp.body!.getReader();
