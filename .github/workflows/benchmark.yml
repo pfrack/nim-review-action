@@ -62,11 +62,13 @@ jobs:
             LAST_MSG=$(git log -1 --format=%s)
             if echo "$LAST_MSG" | grep -q "chore: update model order from daily benchmark"; then
               git commit --amend --no-edit --date="$(date -R)"
+              git checkout -- .
               git clean -fd
               git pull --rebase origin main
               git push --force
             else
               git commit -m "chore: update model order from daily benchmark [skip ci]"
+              git checkout -- .
               git clean -fd
               git pull --rebase origin main
               git push
@@ -130,11 +132,13 @@ jobs:
             LAST_MSG=$(git log -1 --format=%s)
             if echo "$LAST_MSG" | grep -q "chore: update mistral model order from daily benchmark"; then
               git commit --amend --no-edit --date="$(date -R)"
+              git checkout -- .
               git clean -fd
               git pull --rebase origin main
               git push --force
             else
               git commit -m "chore: update mistral model order from daily benchmark [skip ci]"
+              git checkout -- .
               git clean -fd
               git pull --rebase origin main
               git push
