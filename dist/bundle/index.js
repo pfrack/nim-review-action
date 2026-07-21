@@ -36245,7 +36245,14 @@ async function run() {
         try {
             lib_core.info(`Trying ${tagged.id} (${tagged.provider})...`);
             const result = await client.chat(tagged.id, [
-                { role: 'system', content: config.systemPrompt || BASE_SYSTEM_PROMPT },
+                {
+                    role: 'system',
+                    content: config.promptMode === 'replace'
+                        ? (config.systemPrompt || BASE_SYSTEM_PROMPT)
+                        : (config.systemPrompt
+                            ? `${BASE_SYSTEM_PROMPT}\n\n${config.systemPrompt}`
+                            : BASE_SYSTEM_PROMPT),
+                },
                 { role: 'user', content: userMsg },
             ], {
                 temperature: 0.2,
@@ -36272,7 +36279,14 @@ async function run() {
                     : result.content;
                 const errorSummary = parsed.error.issues.slice(0, 3).map(i => `- ${i.path.join('.')}: ${i.message}`).join('\n');
                 const retryResult = await client.chat(tagged.id, [
-                    { role: 'system', content: config.systemPrompt || BASE_SYSTEM_PROMPT },
+                    {
+                        role: 'system',
+                        content: config.promptMode === 'replace'
+                            ? (config.systemPrompt || BASE_SYSTEM_PROMPT)
+                            : (config.systemPrompt
+                                ? `${BASE_SYSTEM_PROMPT}\n\n${config.systemPrompt}`
+                                : BASE_SYSTEM_PROMPT),
+                    },
                     { role: 'user', content: userMsg },
                     { role: 'assistant', content: truncated },
                     { role: 'user', content: `Your previous response was not valid JSON matching the required schema. ${parsed.error.issues.length} validation error(s) occurred:\n${errorSummary}\nPlease respond with valid JSON matching the schema.` },
@@ -36310,6 +36324,15 @@ async function run() {
     }
     const modelShort = usedModel.split('/').pop() || usedModel;
     const sections = [`### AI Code Review\n\n<sub>Model: ${modelShort}</sub>\n`];
+    if (review && review.findings.length > 0) {
+        const { critical, warning, suggestion } = severityTally(review);
+        const tally = [
+            critical ? `🚨 ${critical} critical${critical === 1 ? '' : 's'}` : null,
+            warning ? `⚠️ ${warning} warning${warning === 1 ? '' : 's'}` : null,
+            suggestion ? `💡 ${suggestion} suggestion${suggestion === 1 ? '' : 's'}` : null,
+        ].filter(Boolean).join(' · ');
+        sections.push(`\n${tally}\n`);
+    }
     if (review) {
         sections.push(`\n${renderReview(review)}`);
     }
