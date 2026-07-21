@@ -204,6 +204,12 @@ async function main() {
             process.stderr.write(`Benchmarking current ${models.length} models from action.yml\n`);
         }
     }
+    // --probe mode runs before model discovery so a probe-only invocation
+    // does not trigger LLM-based score matching for newly-found models.
+    if (process.argv.includes('--probe')) {
+        await probe(baseURL, apiKey, models);
+        return;
+    }
     // Discover new models and fetch SWE-bench scores
     const fetchedScores = new Map();
     const discoveredModels = [];
@@ -237,11 +243,6 @@ async function main() {
     // Add discovered models to the benchmark list
     if (discoveredModels.length > 0) {
         models = [...models, ...discoveredModels];
-    }
-    // --probe mode
-    if (process.argv.includes('--probe')) {
-        await probe(baseURL, apiKey, models);
-        return;
     }
     let iterations = 2;
     const iterEnv = process.env.NIM_BENCH_ITERATIONS;
@@ -333,55 +334,73 @@ async function main() {
     }
     // Recheck previously removed models (concurrent with limit)
     if (removedModels.length > 0) {
-        process.stderr.write(`\nRechecking ${removedModels.length} previously removed model(s)...\n`);
-        const recovered = [];
-        const stillFailed = [];
-        const concurrency = parseInt(envOrDefault('NIM_RECHECK_CONCURRENCY', '3'), 10);
-        // Process models in batches of `concurrency`
-        for (let i = 0; i < removedModels.length; i += concurrency) {
-            const batch = removedModels.slice(i, i + concurrency);
-            const outcomes = await Promise.all(batch.map(async (model) => {
-                process.stderr.write(`  Probing ${model} ...`);
-                const ok = await client.probeModel(model);
-                if (!ok) {
-                    process.stderr.write(' still down\n');
-                    return { model, status: 'down' };
-                }
-                process.stderr.write(' back! benchmarking...');
-                const result = await runBenchmark(client, model, {
-                    prompt: benchPrompt,
-                    iterations,
-                    temperature: 0.2,
-                    maxTokens: 1024,
-                });
-                const errCount = result.iterations.filter(it => it.error !== null).length;
-                if (errCount === iterations) {
-                    process.stderr.write(' FAILED\n');
-                    return { model, status: 'failed' };
-                }
-                process.stderr.write(' ok\n');
-                return { model, status: 'recovered', result };
-            }));
-            for (const outcome of outcomes) {
-                if (outcome.status === 'recovered') {
-                    recovered.push(outcome.model);
-                    results.push(outcome.result);
-                }
-                else {
-                    stillFailed.push(outcome.model);
+        // Skip models that are already in the active list — they will be
+        // benchmarked as part of the main run, so rechecking here would duplicate
+        // work. Also drops them from the removed-models file below.
+        const activeSet = new Set(models);
+        const toRecheck = removedModels.filter(m => !activeSet.has(m));
+        const alreadyActive = removedModels.filter(m => activeSet.has(m));
+        if (alreadyActive.length > 0) {
+            process.stderr.write(`\nSkipping recheck for ${alreadyActive.length} model(s) already in active list: ${alreadyActive.join(', ')}\n`);
+        }
+        if (toRecheck.length === 0) {
+            // Nothing to recheck; just persist the cleanup.
+            const finalRemoved = new Set([...transientFailed]);
+            writeRemovedModels([...finalRemoved]);
+            removedModels = [...finalRemoved];
+        }
+        else {
+            process.stderr.write(`\nRechecking ${toRecheck.length} previously removed model(s)...\n`);
+            const recovered = [];
+            const stillFailed = [];
+            const concurrency = parseInt(envOrDefault('NIM_RECHECK_CONCURRENCY', '3'), 10);
+            // Process models in batches of `concurrency`
+            for (let i = 0; i < toRecheck.length; i += concurrency) {
+                const batch = toRecheck.slice(i, i + concurrency);
+                const outcomes = await Promise.all(batch.map(async (model) => {
+                    process.stderr.write(`  Probing ${model} ...`);
+                    const ok = await client.probeModel(model);
+                    if (!ok) {
+                        process.stderr.write(' still down\n');
+                        return { model, status: 'down' };
+                    }
+                    process.stderr.write(' back! benchmarking...');
+                    const result = await runBenchmark(client, model, {
+                        prompt: benchPrompt,
+                        iterations,
+                        temperature: 0.2,
+                        maxTokens: 1024,
+                    });
+                    const errCount = result.iterations.filter(it => it.error !== null).length;
+                    if (errCount === iterations) {
+                        process.stderr.write(' FAILED\n');
+                        return { model, status: 'failed' };
+                    }
+                    process.stderr.write(' ok\n');
+                    return { model, status: 'recovered', result };
+                }));
+                for (const outcome of outcomes) {
+                    if (outcome.status === 'recovered') {
+                        recovered.push(outcome.model);
+                        results.push(outcome.result);
+                    }
+                    else {
+                        stillFailed.push(outcome.model);
+                    }
                 }
             }
-        }
-        // Persist the final removed-models state once. recovered models are
-        // dropped, recheck-still-failed models are kept, and any new transient
-        // failures from this run are merged in (deduplicated).
-        const finalRemoved = new Set(stillFailed);
-        for (const m of transientFailed)
-            finalRemoved.add(m);
-        writeRemovedModels([...finalRemoved]);
-        removedModels = [...finalRemoved];
-        if (recovered.length > 0) {
-            process.stderr.write(`  Recovered ${recovered.length} model(s): ${recovered.join(', ')}\n`);
+            // Persist the final removed-models state once. recovered models are
+            // dropped, recheck-still-failed models are kept, already-active models
+            // are dropped (they are now in the main list), and any new transient
+            // failures from this run are merged in (deduplicated).
+            const finalRemoved = new Set(stillFailed);
+            for (const m of transientFailed)
+                finalRemoved.add(m);
+            writeRemovedModels([...finalRemoved]);
+            removedModels = [...finalRemoved];
+            if (recovered.length > 0) {
+                process.stderr.write(`  Recovered ${recovered.length} model(s): ${recovered.join(', ')}\n`);
+            }
         }
     }
     else if (transientFailed.length > 0) {

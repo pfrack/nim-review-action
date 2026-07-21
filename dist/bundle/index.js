@@ -35714,6 +35714,11 @@ function parseSweBenchResponse(data) {
         org: m.organization_id || '',
     }));
 }
+// Module-level counter used to escalate the warning once consecutive
+// fetch failures pile up. This is intentionally process-local: bench-reorder
+// is invoked as a single CLI per workflow run, so there is no concurrency
+// to worry about. If this module is ever reused in a server context,
+// replace this with a per-request counter passed through fetchSweBenchScores.
 let sweBenchFetchFailures = 0;
 const SWE_BENCH_FAIL_WARN_THRESHOLD = 3;
 /**
