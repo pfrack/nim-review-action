@@ -35372,6 +35372,9 @@ const ReviewFindingSchema = object({
     line_end: schemas_number().nullable().optional(),
     issue: schemas_string(),
     suggestion: schemas_string().nullable().optional(),
+    critical_action: schemas_string(),
+    warning_action: schemas_string(),
+    suggestion_action: schemas_string(),
 });
 const ReviewSchema = object({
     findings: array(ReviewFindingSchema),
@@ -35395,8 +35398,11 @@ const ReviewJsonSchema = {
                     line_end: { type: ['number', 'null'] },
                     issue: { type: 'string' },
                     suggestion: { type: ['string', 'null'] },
+                    critical_action: { type: 'string' },
+                    warning_action: { type: 'string' },
+                    suggestion_action: { type: 'string' },
                 },
-                required: ['file', 'severity', 'issue'],
+                required: ['file', 'severity', 'issue', 'critical_action', 'warning_action', 'suggestion_action'],
                 additionalProperties: false,
             },
         },

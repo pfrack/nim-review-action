@@ -199,47 +199,47 @@ describe('validateFindings', () => {
     };
     const changedFiles = new Set(['src/main.ts']);
     it('drops finding for file not in changed set', () => {
-        const review = { findings: [{ file: 'unknown.ts', severity: 'Warning', issue: 'bad', line_start: 11, line_end: 12 }] };
+        const review = { findings: [{ file: 'unknown.ts', severity: 'Warning', issue: 'bad', line_start: 11, line_end: 12, critical_action: 'not applicable', warning_action: 'investigate', suggestion_action: 'not applicable' }] };
         const result = validateFindings(review, filesDiff, changedFiles);
         assert.strictEqual(result.valid.findings.length, 0);
         assert.ok(result.valid.summary);
         assert.ok(result.warnings.some(w => w.includes('unknown.ts')));
     });
     it('drops finding with line outside all hunks', () => {
-        const review = { findings: [{ file: 'src/main.ts', severity: 'Critical', issue: 'bad', line_start: 100, line_end: 105 }] };
+        const review = { findings: [{ file: 'src/main.ts', severity: 'Critical', issue: 'bad', line_start: 100, line_end: 105, critical_action: 'fix', warning_action: 'not applicable', suggestion_action: 'not applicable' }] };
         const result = validateFindings(review, filesDiff, changedFiles);
         assert.strictEqual(result.valid.findings.length, 0);
         assert.ok(result.valid.summary);
         assert.ok(result.warnings.some(w => w.includes('100')));
     });
     it('keeps finding with line inside hunk', () => {
-        const review = { findings: [{ file: 'src/main.ts', severity: 'Warning', issue: 'ok', line_start: 11, line_end: 12 }] };
+        const review = { findings: [{ file: 'src/main.ts', severity: 'Warning', issue: 'ok', line_start: 11, line_end: 12, critical_action: 'not applicable', warning_action: 'investigate', suggestion_action: 'not applicable' }] };
         const result = validateFindings(review, filesDiff, changedFiles);
         assert.strictEqual(result.valid.findings.length, 1);
         assert.strictEqual(result.valid.findings[0].issue, 'ok');
         assert.strictEqual(result.warnings.length, 0);
     });
     it('keeps file-wide finding (no line)', () => {
-        const review = { findings: [{ file: 'src/main.ts', severity: 'Suggestion', issue: 'no tests' }] };
+        const review = { findings: [{ file: 'src/main.ts', severity: 'Suggestion', issue: 'no tests', critical_action: 'not applicable', warning_action: 'not applicable', suggestion_action: 'add tests' }] };
         const result = validateFindings(review, filesDiff, changedFiles);
         assert.strictEqual(result.valid.findings.length, 1);
         assert.strictEqual(result.warnings.length, 0);
     });
     it('drops finding with line_end but no line_start', () => {
-        const review = { findings: [{ file: 'src/main.ts', severity: 'Warning', issue: 'bad', line_end: 12 }] };
+        const review = { findings: [{ file: 'src/main.ts', severity: 'Warning', issue: 'bad', line_end: 12, critical_action: 'not applicable', warning_action: 'investigate', suggestion_action: 'not applicable' }] };
         const result = validateFindings(review, filesDiff, changedFiles);
         assert.strictEqual(result.valid.findings.length, 0);
         assert.ok(result.warnings.some(w => w.includes('line_end but no line_start')));
     });
     it('returns summary when all findings dropped', () => {
-        const review = { findings: [{ file: 'nope.ts', severity: 'Warning', issue: 'x' }] };
+        const review = { findings: [{ file: 'nope.ts', severity: 'Warning', issue: 'x', critical_action: 'not applicable', warning_action: 'investigate', suggestion_action: 'not applicable' }] };
         const result = validateFindings(review, filesDiff, changedFiles);
         assert.strictEqual(result.valid.findings.length, 0);
         assert.ok(result.valid.summary);
         assert.ok(result.warnings.length > 0);
     });
     it('returns empty valid finding for clean review with summary', () => {
-        const review = { findings: [{ file: 'nope.ts', severity: 'Warning', issue: 'x' }], summary: 'All good' };
+        const review = { findings: [{ file: 'nope.ts', severity: 'Warning', issue: 'x', critical_action: 'not applicable', warning_action: 'investigate', suggestion_action: 'not applicable' }], summary: 'All good' };
         const result = validateFindings(review, filesDiff, changedFiles);
         assert.strictEqual(result.valid.findings.length, 0);
         assert.strictEqual(result.valid.summary, 'All good');
@@ -256,7 +256,7 @@ describe('renderReview', () => {
     });
     it('renders model name in header', () => {
         const output = renderReview({
-            findings: [{ file: 'a.ts', severity: 'Warning', issue: 'x' }],
+            findings: [{ file: 'a.ts', severity: 'Warning', issue: 'x', critical_action: 'not applicable', warning_action: 'investigate', suggestion_action: 'not applicable' }],
         });
         // renderReview doesn't include model name — that's added by index.ts
         // but it should contain the finding
@@ -266,9 +266,9 @@ describe('renderReview', () => {
     it('groups findings by file', () => {
         const output = renderReview({
             findings: [
-                { file: 'b.ts', severity: 'Critical', issue: 'issue1' },
-                { file: 'a.ts', severity: 'Warning', issue: 'issue2' },
-                { file: 'a.ts', severity: 'Suggestion', issue: 'issue3' },
+                { file: 'b.ts', severity: 'Critical', issue: 'issue1', critical_action: 'fix', warning_action: 'not applicable', suggestion_action: 'not applicable' },
+                { file: 'a.ts', severity: 'Warning', issue: 'issue2', critical_action: 'not applicable', warning_action: 'investigate', suggestion_action: 'not applicable' },
+                { file: 'a.ts', severity: 'Suggestion', issue: 'issue3', critical_action: 'not applicable', warning_action: 'not applicable', suggestion_action: 'maybe' },
             ],
         });
         // Files should be sorted alphabetically
@@ -281,27 +281,27 @@ describe('renderReview', () => {
     });
     it('includes suggestion when present', () => {
         const output = renderReview({
-            findings: [{ file: 'x.ts', severity: 'Warning', issue: 'bad', suggestion: 'fix it' }],
+            findings: [{ file: 'x.ts', severity: 'Warning', issue: 'bad', suggestion: 'fix it', critical_action: 'not applicable', warning_action: 'investigate', suggestion_action: 'not applicable' }],
         });
         assert.ok(output.includes('fix it'));
     });
     it('includes summary when present', () => {
         const output = renderReview({
-            findings: [{ file: 'x.ts', severity: 'Warning', issue: 'y' }],
+            findings: [{ file: 'x.ts', severity: 'Warning', issue: 'y', critical_action: 'not applicable', warning_action: 'investigate', suggestion_action: 'not applicable' }],
             summary: 'All done.',
         });
         assert.ok(output.includes('All done.'));
     });
     it('renders line numbers when present', () => {
         const output = renderReview({
-            findings: [{ file: 'x.ts', severity: 'Critical', issue: 'bad', line_start: 10, line_end: 15 }],
+            findings: [{ file: 'x.ts', severity: 'Critical', issue: 'bad', line_start: 10, line_end: 15, critical_action: 'fix', warning_action: 'not applicable', suggestion_action: 'not applicable' }],
         });
         assert.ok(output.includes('10'));
         assert.ok(output.includes('15'));
     });
     it('renders single line when line_end equals line_start', () => {
         const output = renderReview({
-            findings: [{ file: 'x.ts', severity: 'Warning', issue: 'bad', line_start: 5, line_end: 5 }],
+            findings: [{ file: 'x.ts', severity: 'Warning', issue: 'bad', line_start: 5, line_end: 5, critical_action: 'not applicable', warning_action: 'investigate', suggestion_action: 'not applicable' }],
         });
         assert.ok(output.includes('5'));
         // Should not include dash range
