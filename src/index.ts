@@ -177,6 +177,11 @@ async function run(): Promise<void> {
 
   const BATCH_SIZE = 50;
 
+  if (filesToReview.length === 0) {
+    core.info('No files to review');
+    return;
+  }
+
   // Build diff map and split into batches if needed
   const filesDiffMap: Record<string, string> = {};
   for (const f of filesToReview) {

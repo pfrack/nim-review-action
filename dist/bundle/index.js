@@ -27704,6 +27704,7 @@ class OpenAIClient {
 
 function validateCodeContext(finding, diff) {
     const issue = finding.issue;
+    const warnings = [];
     function nameInDiff(name) {
         const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         return new RegExp(`\\b${escaped}\\b`).test(diff);
@@ -27714,7 +27715,7 @@ function validateCodeContext(finding, diff) {
         for (const ref of backtickRefs) {
             const name = ref.slice(1, -1);
             if (name.length > 2 && !nameInDiff(name)) {
-                return { valid: false, reason: `Referenced identifier \`${name}\` not found in diff` };
+                warnings.push(`Note: referenced identifier \`${name}\` not found in diff — may exist in broader file context`);
             }
         }
     }
@@ -27723,10 +27724,10 @@ function validateCodeContext(finding, diff) {
     if (explicitRef) {
         const name = explicitRef[1];
         if (name.length > 2 && !nameInDiff(name)) {
-            return { valid: false, reason: `Referenced \`${name}\` not found in diff` };
+            warnings.push(`Note: referenced \`${name}\` not found in diff — may exist in broader file context`);
         }
     }
-    return { valid: true };
+    return { valid: true, reason: warnings.length > 0 ? warnings.join('; ') : undefined };
 }
 async function revalidateFindings(findings, diff, client, model) {
     if (findings.length === 0)
@@ -27911,9 +27912,8 @@ async function validateFindings(review, filesDiff, changedFiles, client, model) 
             }
         }
         const codeContext = validateCodeContext(f, filesDiff[f.file] || '');
-        if (!codeContext.valid) {
-            warnings.push(`Note: ${codeContext.reason} in "${f.file}", dropping`);
-            continue;
+        if (codeContext.reason) {
+            warnings.push(`${codeContext.reason} in "${f.file}"`);
         }
         validFindings.push(f);
     }
@@ -36593,6 +36593,7 @@ async function probeModels(chain, clients) {
 ;// CONCATENATED MODULE: ./src/github-review.ts
 
 
+
 const github_review_GITHUB_API_TIMEOUT_MS = 30_000;
 const AI_REVIEW_MARKER = '### AI Code Review';
 function formatFindingComment(finding) {
@@ -36689,6 +36690,9 @@ async function findExistingReview(repo, prNumber, token) {
             break;
         page++;
     }
+    if (page > maxPages) {
+        lib_core.warning(`findExistingReview: hit max page limit (${maxPages}) without finding a matching review`);
+    }
     return null;
 }
 async function deleteReview(repo, prNumber, reviewId, token) {
@@ -36745,13 +36749,16 @@ function formatMetrics(metrics) {
     }
     if (metrics.batch_count > 1) {
         lines.push('');
-        lines.push(`**Batching:** ${metrics.batch_count} batches (${Math.ceil(metrics.files_reviewed / metrics.batch_count)} files/batch avg)`);
+        lines.push(`**Batching:** ${metrics.batch_count} batches (${Math.round(metrics.files_reviewed / metrics.batch_count)} files/batch avg)`);
     }
     return lines.join('\n');
 }
 
 ;// CONCATENATED MODULE: ./src/batching.ts
 function batchFiles(filesDiff, batchSize = 50) {
+    if (batchSize <= 0) {
+        throw new Error('batchSize must be a positive integer');
+    }
     const sortedFiles = Object.keys(filesDiff).sort();
     const batches = [];
     for (let i = 0; i < sortedFiles.length; i += batchSize) {
@@ -36773,7 +36780,7 @@ function mergeFindings(batchResults) {
             summaries.push(result.summary);
         }
         for (const finding of result.findings) {
-            const key = `${finding.file}:${finding.line_start ?? 'file'}:${finding.line_end ?? 'file'}:${finding.severity}:${finding.issue}`;
+            const key = `${finding.file}:${finding.line_start ?? 'file'}:${finding.line_end ?? 'file'}:${finding.severity}:${finding.issue.trim().toLowerCase()}`;
             if (!seen.has(key)) {
                 seen.add(key);
                 merged.push(finding);
@@ -36942,6 +36949,10 @@ async function run() {
         return 'json_schema';
     }
     const BATCH_SIZE = 50;
+    if (filesToReview.length === 0) {
+        lib_core.info('No files to review');
+        return;
+    }
     // Build diff map and split into batches if needed
     const filesDiffMap = {};
     for (const f of filesToReview) {

@@ -9,6 +9,7 @@ interface CodeContextResult {
 
 export function validateCodeContext(finding: ReviewFinding, diff: string): CodeContextResult {
   const issue = finding.issue;
+  const warnings: string[] = [];
 
   function nameInDiff(name: string): boolean {
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -21,7 +22,7 @@ export function validateCodeContext(finding: ReviewFinding, diff: string): CodeC
     for (const ref of backtickRefs) {
       const name = ref.slice(1, -1);
       if (name.length > 2 && !nameInDiff(name)) {
-        return { valid: false, reason: `Referenced identifier \`${name}\` not found in diff` };
+        warnings.push(`Note: referenced identifier \`${name}\` not found in diff — may exist in broader file context`);
       }
     }
   }
@@ -31,11 +32,11 @@ export function validateCodeContext(finding: ReviewFinding, diff: string): CodeC
   if (explicitRef) {
     const name = explicitRef[1];
     if (name.length > 2 && !nameInDiff(name)) {
-      return { valid: false, reason: `Referenced \`${name}\` not found in diff` };
+      warnings.push(`Note: referenced \`${name}\` not found in diff — may exist in broader file context`);
     }
   }
 
-  return { valid: true };
+  return { valid: true, reason: warnings.length > 0 ? warnings.join('; ') : undefined };
 }
 
 export async function revalidateFindings(

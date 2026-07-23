@@ -29,7 +29,7 @@ export function formatMetrics(metrics) {
     }
     if (metrics.batch_count > 1) {
         lines.push('');
-        lines.push(`**Batching:** ${metrics.batch_count} batches (${Math.ceil(metrics.files_reviewed / metrics.batch_count)} files/batch avg)`);
+        lines.push(`**Batching:** ${metrics.batch_count} batches (${Math.round(metrics.files_reviewed / metrics.batch_count)} files/batch avg)`);
     }
     return lines.join('\n');
 }

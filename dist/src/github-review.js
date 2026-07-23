@@ -1,3 +1,4 @@
+import * as core from '@actions/core';
 import { withRetry, RetryableError } from './retry.js';
 import { escapeMarkdown } from './utils.js';
 const GITHUB_API_TIMEOUT_MS = 30_000;
@@ -95,6 +96,9 @@ export async function findExistingReview(repo, prNumber, token) {
         if (reviews.length < perPage)
             break;
         page++;
+    }
+    if (page > maxPages) {
+        core.warning(`findExistingReview: hit max page limit (${maxPages}) without finding a matching review`);
     }
     return null;
 }

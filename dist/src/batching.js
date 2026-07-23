@@ -1,4 +1,7 @@
 export function batchFiles(filesDiff, batchSize = 50) {
+    if (batchSize <= 0) {
+        throw new Error('batchSize must be a positive integer');
+    }
     const sortedFiles = Object.keys(filesDiff).sort();
     const batches = [];
     for (let i = 0; i < sortedFiles.length; i += batchSize) {
@@ -20,7 +23,7 @@ export function mergeFindings(batchResults) {
             summaries.push(result.summary);
         }
         for (const finding of result.findings) {
-            const key = `${finding.file}:${finding.line_start ?? 'file'}:${finding.line_end ?? 'file'}:${finding.severity}:${finding.issue}`;
+            const key = `${finding.file}:${finding.line_start ?? 'file'}:${finding.line_end ?? 'file'}:${finding.severity}:${finding.issue.trim().toLowerCase()}`;
             if (!seen.has(key)) {
                 seen.add(key);
                 merged.push(finding);

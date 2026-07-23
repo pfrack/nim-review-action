@@ -1,6 +1,7 @@
 import * as core from '@actions/core';
 export function validateCodeContext(finding, diff) {
     const issue = finding.issue;
+    const warnings = [];
     function nameInDiff(name) {
         const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         return new RegExp(`\\b${escaped}\\b`).test(diff);
@@ -11,7 +12,7 @@ export function validateCodeContext(finding, diff) {
         for (const ref of backtickRefs) {
             const name = ref.slice(1, -1);
             if (name.length > 2 && !nameInDiff(name)) {
-                return { valid: false, reason: `Referenced identifier \`${name}\` not found in diff` };
+                warnings.push(`Note: referenced identifier \`${name}\` not found in diff — may exist in broader file context`);
             }
         }
     }
@@ -20,10 +21,10 @@ export function validateCodeContext(finding, diff) {
     if (explicitRef) {
         const name = explicitRef[1];
         if (name.length > 2 && !nameInDiff(name)) {
-            return { valid: false, reason: `Referenced \`${name}\` not found in diff` };
+            warnings.push(`Note: referenced \`${name}\` not found in diff — may exist in broader file context`);
         }
     }
-    return { valid: true };
+    return { valid: true, reason: warnings.length > 0 ? warnings.join('; ') : undefined };
 }
 export async function revalidateFindings(findings, diff, client, model) {
     if (findings.length === 0)

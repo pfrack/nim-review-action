@@ -41,10 +41,10 @@ describe('validateCodeContext', () => {
     assert.strictEqual(result.valid, true);
   });
 
-  it('fails finding referencing function not in diff', () => {
+  it('warns about missing reference instead of dropping finding', () => {
     const finding = makeFinding({ issue: 'The call to `nonexistentFunc` may fail' });
     const result = validateCodeContext(finding, diff);
-    assert.strictEqual(result.valid, false);
+    assert.strictEqual(result.valid, true);
     assert.ok(result.reason?.includes('nonexistentFunc'));
   });
 
@@ -54,10 +54,10 @@ describe('validateCodeContext', () => {
     assert.strictEqual(result.valid, true);
   });
 
-  it('fails finding referencing variable not in diff', () => {
+  it('warns about missing variable reference instead of dropping finding', () => {
     const finding = makeFinding({ issue: 'The variable `unknownVar` is not validated' });
     const result = validateCodeContext(finding, diff);
-    assert.strictEqual(result.valid, false);
+    assert.strictEqual(result.valid, true);
     assert.ok(result.reason?.includes('unknownVar'));
   });
 
@@ -79,10 +79,11 @@ describe('validateCodeContext', () => {
     assert.strictEqual(result.valid, true);
   });
 
-  it('passes finding with empty diff', () => {
+  it('warns about missing reference with empty diff but keeps finding', () => {
     const finding = makeFinding({ issue: 'The call to `processData` may fail' });
     const result = validateCodeContext(finding, '');
-    assert.strictEqual(result.valid, false);
+    assert.strictEqual(result.valid, true);
+    assert.ok(result.reason?.includes('processData'));
   });
 
   it('passes finding when issue has no identifiable references', () => {

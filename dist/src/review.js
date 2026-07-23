@@ -115,9 +115,8 @@ export async function validateFindings(review, filesDiff, changedFiles, client, 
             }
         }
         const codeContext = validateCodeContext(f, filesDiff[f.file] || '');
-        if (!codeContext.valid) {
-            warnings.push(`Note: ${codeContext.reason} in "${f.file}", dropping`);
-            continue;
+        if (codeContext.reason) {
+            warnings.push(`${codeContext.reason} in "${f.file}"`);
         }
         validFindings.push(f);
     }

@@ -156,6 +156,10 @@ async function run() {
         return 'json_schema';
     }
     const BATCH_SIZE = 50;
+    if (filesToReview.length === 0) {
+        core.info('No files to review');
+        return;
+    }
     // Build diff map and split into batches if needed
     const filesDiffMap = {};
     for (const f of filesToReview) {

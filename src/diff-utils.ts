@@ -12,14 +12,16 @@ export function chunkDiff(diff: string, maxTokens: number = 12000): DiffChunk[] 
   let currentStart = 1;
   let currentTokens = 0;
   let lastHunkHeader = '';
+  let linesInHunk = 0;
 
   function pushChunk() {
     if (currentChunk.length > 0 && currentTokens > 0) {
       chunks.push({
         header: lastHunkHeader || currentChunk[0] || '',
         content: currentChunk.join('\n'),
-        startLine: currentStart,
+        startLine: currentStart + linesInHunk,
       });
+      linesInHunk += currentChunk.filter(l => !l.startsWith('@@')).length;
     }
   }
 
@@ -32,6 +34,7 @@ export function chunkDiff(diff: string, maxTokens: number = 12000): DiffChunk[] 
       lastHunkHeader = line;
       currentStart = parseInt(headerMatch[1], 10);
       currentTokens = currentChunk.join('\n').length;
+      linesInHunk = 0;
     } else if (currentChunk.length === 0) {
       preamble.push(line);
     } else {
