@@ -36594,6 +36594,7 @@ async function probeModels(chain, clients) {
 
 
 const github_review_GITHUB_API_TIMEOUT_MS = 30_000;
+const AI_REVIEW_MARKER = '### AI Code Review';
 function formatFindingComment(finding) {
     const emoji = finding.severity === 'Critical' ? '🚨'
         : finding.severity === 'Warning' ? '⚠️'
@@ -36625,6 +36626,7 @@ async function createReview(repo, prNumber, commitSha, findings, body, token) {
     const payload = {
         event: 'COMMENT',
         comments,
+        commit_id: commitSha,
     };
     if (body)
         payload.body = body;
@@ -36706,7 +36708,6 @@ async function deleteReview(repo, prNumber, reviewId, token) {
         }
     });
 }
-const AI_REVIEW_MARKER = '### AI Code Review';
 const INLINE_COMMENT_THRESHOLD = 50;
 function shouldUseInlineComments(findings) {
     return findings.filter(f => f.line_start != null).length <= INLINE_COMMENT_THRESHOLD;
@@ -36772,7 +36773,7 @@ function mergeFindings(batchResults) {
             summaries.push(result.summary);
         }
         for (const finding of result.findings) {
-            const key = `${finding.file}:${finding.line_start ?? 'file'}:${finding.severity}:${finding.issue}`;
+            const key = `${finding.file}:${finding.line_start ?? 'file'}:${finding.line_end ?? 'file'}:${finding.severity}:${finding.issue}`;
             if (!seen.has(key)) {
                 seen.add(key);
                 merged.push(finding);
@@ -37134,7 +37135,10 @@ async function run() {
         }
     }
 }
-run().catch(err => {
-    lib_core.setFailed(err instanceof Error ? err.message : String(err));
-});
+const inTest = process.argv.includes('--test');
+if (!inTest) {
+    run().catch(err => {
+        lib_core.setFailed(err instanceof Error ? err.message : String(err));
+    });
+}
 

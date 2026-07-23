@@ -3,6 +3,7 @@ import { escapeMarkdown } from './utils.js';
 import type { ReviewFinding } from './review-schema.js';
 
 const GITHUB_API_TIMEOUT_MS = 30_000;
+export const AI_REVIEW_MARKER = '### AI Code Review';
 
 interface ReviewComment {
   path: string;
@@ -15,6 +16,7 @@ interface CreateReviewPayload {
   body?: string;
   event: 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES';
   comments: ReviewComment[];
+  commit_id?: string;
 }
 
 export function formatFindingComment(finding: ReviewFinding): string {
@@ -58,6 +60,7 @@ export async function createReview(
   const payload: CreateReviewPayload = {
     event: 'COMMENT',
     comments,
+    commit_id: commitSha,
   };
   if (body) payload.body = body;
 
@@ -155,8 +158,6 @@ export async function deleteReview(
     }
   });
 }
-
-export const AI_REVIEW_MARKER = '### AI Code Review';
 
 export const INLINE_COMMENT_THRESHOLD = 50;
 

@@ -349,6 +349,9 @@ async function run() {
         }
     }
 }
-run().catch(err => {
-    core.setFailed(err instanceof Error ? err.message : String(err));
-});
+const inTest = process.argv.includes('--test');
+if (!inTest) {
+    run().catch(err => {
+        core.setFailed(err instanceof Error ? err.message : String(err));
+    });
+}

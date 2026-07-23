@@ -1,6 +1,7 @@
 import { withRetry, RetryableError } from './retry.js';
 import { escapeMarkdown } from './utils.js';
 const GITHUB_API_TIMEOUT_MS = 30_000;
+export const AI_REVIEW_MARKER = '### AI Code Review';
 export function formatFindingComment(finding) {
     const emoji = finding.severity === 'Critical' ? '🚨'
         : finding.severity === 'Warning' ? '⚠️'
@@ -32,6 +33,7 @@ export async function createReview(repo, prNumber, commitSha, findings, body, to
     const payload = {
         event: 'COMMENT',
         comments,
+        commit_id: commitSha,
     };
     if (body)
         payload.body = body;
@@ -113,7 +115,6 @@ export async function deleteReview(repo, prNumber, reviewId, token) {
         }
     });
 }
-export const AI_REVIEW_MARKER = '### AI Code Review';
 export const INLINE_COMMENT_THRESHOLD = 50;
 export function shouldUseInlineComments(findings) {
     return findings.filter(f => f.line_start != null).length <= INLINE_COMMENT_THRESHOLD;
