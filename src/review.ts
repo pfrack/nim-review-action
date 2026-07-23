@@ -263,12 +263,10 @@ const GITHUB_API_TIMEOUT_MS = 30_000;
 
 export async function postComment(repo: string, prNumber: number, token: string, body: string): Promise<void> {
   const existingId = await findExistingComment(repo, prNumber, token);
-
   if (existingId) {
-    await updateComment(repo, existingId, token, body);
-  } else {
-    await createComment(repo, prNumber, token, body);
+    await deleteComment(repo, existingId, token);
   }
+  await createComment(repo, prNumber, token, body);
 }
 
 export async function deleteComment(repo: string, commentId: number, token: string): Promise<void> {
@@ -332,28 +330,6 @@ export async function findExistingComment(repo: string, prNumber: number, token:
   }
 
   return null;
-}
-
-async function updateComment(repo: string, commentId: number, token: string, body: string): Promise<void> {
-  const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
-  const resp = await withRetry(async () => {
-    const response = await fetch(url, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/vnd.github+json',
-      },
-      body: JSON.stringify({ body }),
-      signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
-    });
-
-    if (!response.ok) {
-      const body = await response.text();
-      throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
-    }
-    return response;
-  });
 }
 
 async function createComment(repo: string, prNumber: number, token: string, body: string): Promise<void> {

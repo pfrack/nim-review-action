@@ -35793,11 +35793,9 @@ const GITHUB_API_TIMEOUT_MS = 30_000;
 async function postComment(repo, prNumber, token, body) {
     const existingId = await findExistingComment(repo, prNumber, token);
     if (existingId) {
-        await updateComment(repo, existingId, token, body);
+        await deleteComment(repo, existingId, token);
     }
-    else {
-        await createComment(repo, prNumber, token, body);
-    }
+    await createComment(repo, prNumber, token, body);
 }
 async function deleteComment(repo, commentId, token) {
     const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
@@ -35856,26 +35854,6 @@ async function findExistingComment(repo, prNumber, token) {
         page++;
     }
     return null;
-}
-async function updateComment(repo, commentId, token, body) {
-    const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
-    const resp = await retry_withRetry(async () => {
-        const response = await fetch(url, {
-            method: 'PATCH',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/vnd.github+json',
-            },
-            body: JSON.stringify({ body }),
-            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
-        });
-        if (!response.ok) {
-            const body = await response.text();
-            throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
-        }
-        return response;
-    });
 }
 async function createComment(repo, prNumber, token, body) {
     const url = `https://api.github.com/repos/${repo}/issues/${prNumber}/comments`;
@@ -36501,16 +36479,17 @@ async function run() {
         }
     }
     const modelShort = usedModel.split('/').pop() || usedModel;
-    // No issues found — delete existing comment if present
+    const existingCommentId = await findExistingComment(repo, prNumber, token);
+    // No issues found — delete existing comment and stop
     if (review && review.findings.length === 0) {
-        const existingId = await findExistingComment(repo, prNumber, token);
-        if (existingId) {
-            await deleteComment(repo, existingId, token);
+        if (existingCommentId) {
+            await deleteComment(repo, existingCommentId, token);
             lib_core.info('Deleted previous review comment (no issues found)');
         }
         return;
     }
-    const sections = [`### AI Code Review\n\n<sub>Model: ${modelShort}</sub>\n`];
+    const title = existingCommentId ? '### AI Code Review: Update' : '### AI Code Review';
+    const sections = [`${title}\n\n<sub>Model: ${modelShort}</sub>\n`];
     if (review) {
         const { critical, warning, suggestion } = severityTally(review);
         const tally = [

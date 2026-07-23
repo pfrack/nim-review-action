@@ -220,18 +220,19 @@ async function run(): Promise<void> {
   }
 
   const modelShort = usedModel.split('/').pop() || usedModel;
+  const existingCommentId = await findExistingComment(repo, prNumber, token);
 
-  // No issues found — delete existing comment if present
+  // No issues found — delete existing comment and stop
   if (review && review.findings.length === 0) {
-    const existingId = await findExistingComment(repo, prNumber, token);
-    if (existingId) {
-      await deleteComment(repo, existingId, token);
+    if (existingCommentId) {
+      await deleteComment(repo, existingCommentId, token);
       core.info('Deleted previous review comment (no issues found)');
     }
     return;
   }
 
-  const sections: string[] = [`### AI Code Review\n\n<sub>Model: ${modelShort}</sub>\n`];
+  const title = existingCommentId ? '### AI Code Review: Update' : '### AI Code Review';
+  const sections: string[] = [`${title}\n\n<sub>Model: ${modelShort}</sub>\n`];
 
   if (review) {
     const { critical, warning, suggestion } = severityTally(review);

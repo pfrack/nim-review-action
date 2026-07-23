@@ -195,16 +195,17 @@ async function run() {
         }
     }
     const modelShort = usedModel.split('/').pop() || usedModel;
-    // No issues found — delete existing comment if present
+    const existingCommentId = await findExistingComment(repo, prNumber, token);
+    // No issues found — delete existing comment and stop
     if (review && review.findings.length === 0) {
-        const existingId = await findExistingComment(repo, prNumber, token);
-        if (existingId) {
-            await deleteComment(repo, existingId, token);
+        if (existingCommentId) {
+            await deleteComment(repo, existingCommentId, token);
             core.info('Deleted previous review comment (no issues found)');
         }
         return;
     }
-    const sections = [`### AI Code Review\n\n<sub>Model: ${modelShort}</sub>\n`];
+    const title = existingCommentId ? '### AI Code Review: Update' : '### AI Code Review';
+    const sections = [`${title}\n\n<sub>Model: ${modelShort}</sub>\n`];
     if (review) {
         const { critical, warning, suggestion } = severityTally(review);
         const tally = [
