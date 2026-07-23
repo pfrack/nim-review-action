@@ -36488,8 +36488,7 @@ async function run() {
         }
         return;
     }
-    const title = existingCommentId ? '### AI Code Review: Update' : '### AI Code Review';
-    const sections = [`${title}\n\n<sub>Model: ${modelShort}</sub>\n`];
+    const sections = [`### AI Code Review\n\n<sub>Model: ${modelShort}</sub>\n`];
     if (review) {
         const { critical, warning, suggestion } = severityTally(review);
         const tally = [
