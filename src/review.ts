@@ -236,7 +236,7 @@ export async function fetchDiff(repo: string, prNumber: number, token: string): 
         'Authorization': `Bearer ${token}`,
         'Accept': 'application/vnd.github.v3.diff',
       },
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -255,6 +255,7 @@ export async function fetchDiff(repo: string, prNumber: number, token: string): 
 }
 
 const COMMENT_MARKER = '### AI Code Review';
+const GITHUB_API_TIMEOUT_MS = 30_000;
 
 export async function postComment(repo: string, prNumber: number, token: string, body: string): Promise<void> {
   const existingId = await findExistingComment(repo, prNumber, token);
@@ -268,7 +269,6 @@ export async function postComment(repo: string, prNumber: number, token: string,
 
 export async function deleteComment(repo: string, commentId: number, token: string): Promise<void> {
   const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
-  // AbortSignal.timeout requires Node >= 15.12; action runs on node24
   await withRetry(async () => {
     const response = await fetch(url, {
       method: 'DELETE',
@@ -276,7 +276,7 @@ export async function deleteComment(repo: string, commentId: number, token: stri
         'Authorization': `Bearer ${token}`,
         'Accept': 'application/vnd.github+json',
       },
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -301,7 +301,7 @@ export async function findExistingComment(repo: string, prNumber: number, token:
             'Authorization': `Bearer ${token}`,
             'Accept': 'application/vnd.github+json',
           },
-          signal: AbortSignal.timeout(30_000),
+          signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
         });
 
         if (!response.ok) {
@@ -341,7 +341,7 @@ async function updateComment(repo: string, commentId: number, token: string, bod
         'Accept': 'application/vnd.github+json',
       },
       body: JSON.stringify({ body }),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -363,7 +363,7 @@ async function createComment(repo: string, prNumber: number, token: string, body
         'Accept': 'application/vnd.github+json',
       },
       body: JSON.stringify({ body }),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
     });
 
     if (!response.ok) {
