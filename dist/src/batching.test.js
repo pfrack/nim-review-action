@@ -1,6 +1,17 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { batchFiles, mergeFindings } from './batching.js';
+function makeFinding(overrides = {}) {
+    return {
+        file: 'a.ts',
+        severity: 'Warning',
+        issue: 'test issue',
+        critical_action: 'not applicable',
+        warning_action: 'investigate',
+        suggestion_action: 'not applicable',
+        ...overrides,
+    };
+}
 describe('batchFiles', () => {
     it('returns single batch for small file set', () => {
         const filesDiff = {
@@ -50,35 +61,35 @@ describe('batchFiles', () => {
 describe('mergeFindings', () => {
     it('merges findings from multiple batches', () => {
         const results = [
-            { findings: [{ file: 'a.ts', issue: 'x' }, { file: 'b.ts', issue: 'y' }] },
-            { findings: [{ file: 'c.ts', issue: 'z' }] },
+            { findings: [makeFinding({ file: 'a.ts', issue: 'x' }), makeFinding({ file: 'b.ts', issue: 'y' })] },
+            { findings: [makeFinding({ file: 'c.ts', issue: 'z' })] },
         ];
         const merged = mergeFindings(results);
         assert.strictEqual(merged.findings.length, 3);
     });
     it('deduplicates findings by file+line', () => {
         const results = [
-            { findings: [{ file: 'a.ts', line_start: 10, issue: 'x' }] },
-            { findings: [{ file: 'a.ts', line_start: 10, issue: 'x' }] },
+            { findings: [makeFinding({ file: 'a.ts', line_start: 10, issue: 'x' })] },
+            { findings: [makeFinding({ file: 'a.ts', line_start: 10, issue: 'x' })] },
         ];
         const merged = mergeFindings(results);
         assert.strictEqual(merged.findings.length, 1);
     });
     it('keeps distinct findings on same file', () => {
         const results = [
-            { findings: [{ file: 'a.ts', line_start: 10, issue: 'x' }] },
-            { findings: [{ file: 'a.ts', line_start: 20, issue: 'y' }] },
+            { findings: [makeFinding({ file: 'a.ts', line_start: 10, issue: 'x' })] },
+            { findings: [makeFinding({ file: 'a.ts', line_start: 20, issue: 'y' })] },
         ];
         const merged = mergeFindings(results);
         assert.strictEqual(merged.findings.length, 2);
     });
-    it('uses first non-null summary', () => {
+    it('concatenates summaries from all batches', () => {
         const results = [
             { findings: [], summary: 'Summary 1' },
             { findings: [], summary: 'Summary 2' },
         ];
         const merged = mergeFindings(results);
-        assert.strictEqual(merged.summary, 'Summary 1');
+        assert.strictEqual(merged.summary, 'Summary 1\n\nSummary 2');
     });
     it('handles empty results', () => {
         const merged = mergeFindings([]);

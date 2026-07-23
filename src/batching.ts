@@ -1,3 +1,5 @@
+import type { ReviewFinding } from './review-schema.js';
+
 export interface FileBatch {
   files: string[];
   diffs: Record<string, string>;
@@ -23,15 +25,15 @@ export function batchFiles(
 }
 
 export function mergeFindings(
-  batchResults: Array<{ findings: Array<{ file: string; line_start?: number | null; [key: string]: unknown }>; summary?: string | null }>,
-): { findings: Array<{ file: string; line_start?: number | null; [key: string]: unknown }>; summary?: string | null } {
+  batchResults: Array<{ findings: ReviewFinding[]; summary?: string | null }>,
+): { findings: ReviewFinding[]; summary?: string | null } {
   const seen = new Set<string>();
-  const merged: Array<{ file: string; line_start?: number | null; [key: string]: unknown }> = [];
-  let summary: string | null = null;
+  const merged: ReviewFinding[] = [];
+  const summaries: string[] = [];
 
   for (const result of batchResults) {
-    if (result.summary && !summary) {
-      summary = result.summary;
+    if (result.summary) {
+      summaries.push(result.summary);
     }
     for (const finding of result.findings) {
       const key = `${finding.file}:${finding.line_start ?? 'file'}`;
@@ -42,5 +44,5 @@ export function mergeFindings(
     }
   }
 
-  return { findings: merged, summary };
+  return { findings: merged, summary: summaries.length > 0 ? summaries.join('\n\n') : null };
 }

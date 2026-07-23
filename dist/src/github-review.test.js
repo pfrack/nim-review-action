@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { formatFindingComment, shouldUseInlineComments } from './github-review.js';
+import { formatFindingComment, shouldUseInlineComments, createReview, findExistingReview, deleteReview } from './github-review.js';
 function makeFinding(overrides = {}) {
     return {
         file: 'src/main.ts',
@@ -67,5 +67,126 @@ describe('shouldUseInlineComments', () => {
             ...Array.from({ length: 30 }, () => makeFinding({ line_start: undefined })),
         ];
         assert.strictEqual(shouldUseInlineComments(findings), true);
+    });
+});
+describe('createReview', () => {
+    const originalFetch = globalThis.fetch;
+    it('posts review with inline comments and returns review ID', async () => {
+        let capturedUrl = '';
+        let capturedBody;
+        globalThis.fetch = (async (url, init) => {
+            capturedUrl = url;
+            capturedBody = JSON.parse(init?.body || '{}');
+            return { ok: true, json: async () => ({ id: 12345 }) };
+        });
+        try {
+            const findings = [
+                makeFinding({ file: 'src/main.ts', line_start: 10 }),
+                makeFinding({ file: 'src/utils.ts', line_start: 20 }),
+            ];
+            const reviewId = await createReview('owner/repo', 42, 'abc123', findings, 'Review summary', 'test-token');
+            assert.strictEqual(reviewId, 12345);
+            assert.ok(capturedUrl.includes('/pulls/42/reviews'));
+            assert.strictEqual(capturedBody.event, 'COMMENT');
+            assert.strictEqual(capturedBody.comments.length, 2);
+            assert.strictEqual(capturedBody.comments[0].path, 'src/main.ts');
+            assert.strictEqual(capturedBody.comments[0].line, 10);
+            assert.strictEqual(capturedBody.comments[0].side, 'RIGHT');
+            assert.strictEqual(capturedBody.body, 'Review summary');
+        }
+        finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+    it('throws when no token provided', async () => {
+        await assert.rejects(createReview('owner/repo', 42, 'abc123', [], undefined, undefined), /GITHUB_TOKEN required/);
+    });
+    it('filters findings without line_start', async () => {
+        let capturedBody;
+        globalThis.fetch = (async (_url, init) => {
+            capturedBody = JSON.parse(init?.body || '{}');
+            return { ok: true, json: async () => ({ id: 999 }) };
+        });
+        try {
+            const findings = [
+                makeFinding({ file: 'src/main.ts', line_start: 10 }),
+                makeFinding({ file: 'src/main.ts' }),
+            ];
+            const reviewId = await createReview('owner/repo', 42, 'abc123', findings, undefined, 'token');
+            assert.strictEqual(reviewId, 999);
+            assert.strictEqual(capturedBody.comments.length, 1);
+            assert.strictEqual(capturedBody.comments[0].path, 'src/main.ts');
+        }
+        finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+});
+describe('findExistingReview', () => {
+    const originalFetch = globalThis.fetch;
+    it('returns review ID when found', async () => {
+        globalThis.fetch = async () => ({
+            ok: true,
+            json: async () => [
+                { id: 100, body: 'Some other review', user: { login: 'bot' } },
+                { id: 200, body: '### AI Code Review\nFindings here', user: { login: 'bot' } },
+            ],
+        });
+        try {
+            const reviewId = await findExistingReview('owner/repo', 42, 'token');
+            assert.strictEqual(reviewId, 200);
+        }
+        finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+    it('returns null when no matching review found', async () => {
+        globalThis.fetch = async () => ({
+            ok: true,
+            json: async () => [
+                { id: 100, body: 'Some other review', user: { login: 'bot' } },
+            ],
+        });
+        try {
+            const reviewId = await findExistingReview('owner/repo', 42, 'token');
+            assert.strictEqual(reviewId, null);
+        }
+        finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+    it('returns null on 404', async () => {
+        globalThis.fetch = async () => ({
+            ok: false,
+            status: 404,
+            text: async () => 'Not Found',
+        });
+        try {
+            const reviewId = await findExistingReview('owner/repo', 42, 'token');
+            assert.strictEqual(reviewId, null);
+        }
+        finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+});
+describe('deleteReview', () => {
+    const originalFetch = globalThis.fetch;
+    it('sends DELETE request', async () => {
+        let capturedUrl = '';
+        let capturedMethod = '';
+        globalThis.fetch = (async (url, init) => {
+            capturedUrl = url;
+            capturedMethod = init?.method || '';
+            return { ok: true };
+        });
+        try {
+            await deleteReview('owner/repo', 42, 200, 'token');
+            assert.ok(capturedUrl.includes('/pulls/42/reviews/200'));
+            assert.strictEqual(capturedMethod, 'DELETE');
+        }
+        finally {
+            globalThis.fetch = originalFetch;
+        }
     });
 });

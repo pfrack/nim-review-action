@@ -4,8 +4,6 @@ export interface DiffChunk {
   startLine: number;
 }
 
-const HUNK_HEADER_RE = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@.*$/gm;
-
 export function chunkDiff(diff: string, maxTokens: number = 12000): DiffChunk[] {
   const lines = diff.split('\n');
   const chunks: DiffChunk[] = [];

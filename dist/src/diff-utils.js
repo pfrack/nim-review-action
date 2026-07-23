@@ -1,4 +1,3 @@
-const HUNK_HEADER_RE = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@.*$/gm;
 export function chunkDiff(diff, maxTokens = 12000) {
     const lines = diff.split('\n');
     const chunks = [];

@@ -217,6 +217,16 @@ const GENERIC_PROMPT = [
   JSON_SCHEMA_DEFINITION,
 ].join('\n');
 
+export const BASE_SYSTEM_PROMPT = GENERIC_PROMPT;
+
+export function buildSystemMessage(promptMode: string, systemPrompt: string, language?: string, rules?: Rule[]): string {
+  const base = buildSystemPrompt(language, rules);
+  if (promptMode === 'replace') {
+    return systemPrompt || base;
+  }
+  return systemPrompt ? `${base}\n\n${systemPrompt}` : base;
+}
+
 export function buildSystemPrompt(language?: string, rules?: Rule[]): string {
   const base = (language && languagePrompts[language]) ? languagePrompts[language] : GENERIC_PROMPT;
   const rulesSection = formatRulesForPrompt(rules || []);

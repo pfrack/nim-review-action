@@ -2,7 +2,9 @@ import * as core from '@actions/core';
 import { JSON_SCHEMA_DEFINITION, type ReviewType, type ReviewFinding } from './review-schema.js';
 import { SEVERITY_GUIDANCE, BASE_SYSTEM_PROMPT } from './prompts.js';
 import { withRetry, RetryableError } from './retry.js';
-import { validateCodeContext } from './validation.js';
+import { validateCodeContext, revalidateFindings } from './validation.js';
+import type { OpenAIClient } from './openai-client.js';
+import { escapeMarkdown } from './utils.js';
 
 export interface Config {
   baseURL: string;
@@ -72,10 +74,6 @@ export function parseDiff(raw: string): Record<string, string> {
   return files;
 }
 
-function escapeMarkdown(text: string): string {
-  return text.replace(/[\\*_{}\[\]()#`>+~|!]/g, '\\$&');
-}
-
 const SEVERITY_META: Record<ReviewFinding['severity'], { emoji: string; label: string; actionKey: keyof ReviewFinding; tag: string }> = {
   Critical:   { emoji: '🚨', label: 'Critical',   actionKey: 'critical_action',   tag: 'Must-fix' },
   Warning:    { emoji: '⚠️', label: 'Warning',    actionKey: 'warning_action',    tag: 'Investigate' },
@@ -117,11 +115,13 @@ export function getFileHunks(filesDiff: Record<string, string>): Map<string, Arr
   return map;
 }
 
-export function validateFindings(
+export async function validateFindings(
   review: ReviewType,
   filesDiff: Record<string, string>,
   changedFiles: Set<string>,
-): { valid: ReviewType; warnings: string[] } {
+  client?: OpenAIClient,
+  model?: string,
+): Promise<{ valid: ReviewType; warnings: string[]; dropped: number }> {
   const warnings: string[] = [];
   const hunks = getFileHunks(filesDiff);
   const validFindings: typeof review.findings = [];
@@ -160,11 +160,21 @@ export function validateFindings(
     validFindings.push(f);
   }
 
-  if (validFindings.length === 0 && !review.summary) {
-    return { valid: { findings: [], summary: 'All findings were invalid — see model output for context.' }, warnings };
+  // Step 5: Optional LLM re-validation to catch hallucinated findings
+  let dropped = 0;
+  if (client && model && validFindings.length > 0) {
+    const allDiff = Object.keys(filesDiff).map(f => filesDiff[f]).join('\n');
+    const revalidated = await revalidateFindings(validFindings, allDiff, client, model);
+    validFindings.length = 0;
+    validFindings.push(...revalidated.valid);
+    dropped = revalidated.dropped;
   }
 
-  return { valid: { findings: validFindings, summary: review.summary }, warnings };
+  if (validFindings.length === 0 && !review.summary) {
+    return { valid: { findings: [], summary: 'All findings were invalid — see model output for context.' }, warnings, dropped };
+  }
+
+  return { valid: { findings: validFindings, summary: review.summary }, warnings, dropped };
 }
 
 export function renderReview(review: ReviewType): string {

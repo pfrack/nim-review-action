@@ -1,25 +1,16 @@
 import * as core from '@actions/core';
 import { OpenAIClient, type ResponseFormat } from './openai-client.js';
 import { loadConfig, fetchDiff, postComment, findExistingComment, deleteComment, shouldExclude, validateFindings, renderReview, severityTally, DiffTooLargeError } from './review.js';
-import { buildSystemPrompt, languageForFile } from './prompts.js';
+import { buildSystemPrompt, buildSystemMessage, languageForFile } from './prompts.js';
 import { loadEvent } from './event.js';
 import { buildCombinedChain, type Provider } from './model-chain.js';
 import { probeModels } from './model-chain.js';
 import { ReviewSchema, ReviewJsonSchema, type ReviewType, type ReviewFinding } from './review-schema.js';
 import { safeParseJson } from './utils.js';
 import { parseRules, validateRules, type Rule } from './rules.js';
-import { validateCodeContext, revalidateFindings } from './validation.js';
 import { createReview, shouldUseInlineComments, findExistingReview, deleteReview } from './github-review.js';
 import { formatMetrics, type ReviewMetrics } from './metrics.js';
 import { batchFiles, mergeFindings, type FileBatch } from './batching.js';
-
-function buildSystemMessage(config: { promptMode: string; systemPrompt: string }, detectedLanguage?: string, rules?: Rule[]): string {
-  const base = buildSystemPrompt(detectedLanguage, rules);
-  if (config.promptMode === 'replace') {
-    return config.systemPrompt || base;
-  }
-  return config.systemPrompt ? `${base}\n\n${config.systemPrompt}` : base;
-}
 
 async function cleanupPreviousOutput(repo: string, prNumber: number, token: string): Promise<void> {
   const existingReviewId = await findExistingReview(repo, prNumber, token);
@@ -227,7 +218,7 @@ async function run(): Promise<void> {
         const result = await client.chat(tagged.id, [
           {
             role: 'system',
-            content: buildSystemMessage(config, detectedLanguage, rules),
+            content: buildSystemMessage(config.promptMode, config.systemPrompt, detectedLanguage, rules),
           },
           { role: 'user', content: userMsg },
         ], {
@@ -260,7 +251,7 @@ async function run(): Promise<void> {
           const retryResult = await client.chat(tagged.id, [
             {
               role: 'system',
-              content: buildSystemMessage(config, detectedLanguage, rules),
+              content: buildSystemMessage(config.promptMode, config.systemPrompt, detectedLanguage, rules),
             },
             { role: 'user', content: userMsg },
             { role: 'assistant', content: truncated },
@@ -288,17 +279,10 @@ async function run(): Promise<void> {
         // Both first-attempt and retry success paths converge here
         batchReview = parsed.data;
         const changedFiles = new Set(batchFileList);
-        const validated = validateFindings(batchReview, batchDiffMap, changedFiles);
+        const validated = await validateFindings(batchReview, batchDiffMap, changedFiles, client, tagged.id);
         for (const w of validated.warnings) core.warning(w);
         batchReview = validated.valid;
-
-        // Optional LLM re-validation to catch hallucinated findings
-        if (config.revalidateFindings && batchReview.findings.length > 0) {
-          const batchDiff = batchFileList.map(f => batchDiffMap[f]).join('\n');
-          const revalidated = await revalidateFindings(batchReview.findings, batchDiff, client, tagged.id);
-          batchReview = { findings: revalidated.valid, summary: batchReview.summary };
-          batchDropped = revalidated.dropped;
-        }
+        batchDropped = validated.dropped;
 
         batchUsedModel = tagged.id;
         core.info(`Done with ${tagged.id} (${tagged.provider})`);
@@ -329,8 +313,8 @@ async function run(): Promise<void> {
       const result = await runModelChainForBatch(batch.files, batch.diffs);
       batchResults.push(result);
     }
-    const merged = mergeFindings(batchResults.map(r => ({ findings: r.findings as Array<{ file: string; line_start?: number | null; [key: string]: unknown }>, summary: r.summary })));
-    review = { findings: merged.findings as ReviewFinding[], summary: merged.summary };
+    const merged = mergeFindings(batchResults.map(r => ({ findings: r.findings, summary: r.summary })));
+    review = { findings: merged.findings, summary: merged.summary };
     usedModel = batchResults[0].usedModel;
     lastRawContent = batchResults[0].lastRawContent;
     validationDropped = batchResults.reduce((sum, r) => sum + r.dropped, 0);
@@ -406,9 +390,13 @@ async function run(): Promise<void> {
 
   const stepSummary = process.env.GITHUB_STEP_SUMMARY;
   if (stepSummary) {
-    const fs = await import('node:fs');
-    fs.appendFileSync(stepSummary, `\n${formatMetrics(metrics)}\n`);
-    core.info('Metrics written to step summary');
+    try {
+      const fs = await import('node:fs');
+      fs.appendFileSync(stepSummary, `\n${formatMetrics(metrics)}\n`);
+      core.info('Metrics written to step summary');
+    } catch (err) {
+      core.warning(`Failed to write metrics to step summary: ${err}`);
+    }
   }
 }
 

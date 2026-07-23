@@ -14,7 +14,12 @@ export function loadEvent(): GitHubEvent {
   }
 
   const data = readFileSync(path, 'utf8');
-  const event = JSON.parse(data) as GitHubEvent;
+  let event: GitHubEvent;
+  try {
+    event = JSON.parse(data) as GitHubEvent;
+  } catch (err) {
+    throw new Error(`Failed to parse GitHub event payload at ${path}: ${err instanceof Error ? err.message : String(err)}`);
+  }
 
   if (!event.pull_request?.number || !event.pull_request?.head?.sha) {
     throw new Error('No PR number or head SHA in event payload');

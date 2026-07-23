@@ -14,10 +14,10 @@ export function batchFiles(filesDiff, batchSize = 50) {
 export function mergeFindings(batchResults) {
     const seen = new Set();
     const merged = [];
-    let summary = null;
+    const summaries = [];
     for (const result of batchResults) {
-        if (result.summary && !summary) {
-            summary = result.summary;
+        if (result.summary) {
+            summaries.push(result.summary);
         }
         for (const finding of result.findings) {
             const key = `${finding.file}:${finding.line_start ?? 'file'}`;
@@ -27,5 +27,5 @@ export function mergeFindings(batchResults) {
             }
         }
     }
-    return { findings: merged, summary };
+    return { findings: merged, summary: summaries.length > 0 ? summaries.join('\n\n') : null };
 }

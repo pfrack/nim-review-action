@@ -1,4 +1,5 @@
 import { withRetry, RetryableError } from './retry.js';
+import { escapeMarkdown } from './utils.js';
 import type { ReviewFinding } from './review-schema.js';
 
 const GITHUB_API_TIMEOUT_MS = 30_000;
@@ -22,15 +23,15 @@ export function formatFindingComment(finding: ReviewFinding): string {
     : '💡';
 
   const parts = [`${emoji} **${finding.severity}**`];
-  parts.push(finding.issue);
+  parts.push(escapeMarkdown(finding.issue));
   if (finding.suggestion) {
-    parts.push(`**Suggestion:** ${finding.suggestion}`);
+    parts.push(`**Suggestion:** ${escapeMarkdown(finding.suggestion)}`);
   }
   const action = finding.severity === 'Critical' ? finding.critical_action
     : finding.severity === 'Warning' ? finding.warning_action
     : finding.suggestion_action;
   if (action && action !== 'not applicable') {
-    parts.push(`**Action:** ${action}`);
+    parts.push(`**Action:** ${escapeMarkdown(action)}`);
   }
   return parts.join('\n\n');
 }

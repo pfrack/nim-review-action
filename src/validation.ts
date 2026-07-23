@@ -1,3 +1,4 @@
+import * as core from '@actions/core';
 import type { OpenAIClient } from './openai-client.js';
 import type { ReviewFinding, ReviewType } from './review-schema.js';
 
@@ -68,6 +69,7 @@ Example: [true, false, true]`;
     try {
       parsed = JSON.parse(result.content);
     } catch {
+      core.warning('LLM revalidation failed: could not parse model response. All findings passed through unchecked.');
       return { valid: findings, dropped: 0 };
     }
 
@@ -84,6 +86,7 @@ Example: [true, false, true]`;
     }
     return { valid, dropped };
   } catch {
+    core.warning('LLM revalidation failed: model call threw an error. All findings passed through unchecked.');
     return { valid: findings, dropped: 0 };
   }
 }

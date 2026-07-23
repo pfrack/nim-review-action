@@ -1,3 +1,4 @@
+import * as core from '@actions/core';
 export function validateCodeContext(finding, diff) {
     const issue = finding.issue;
     // Check for backtick-wrapped identifiers (most reliable)
@@ -46,6 +47,7 @@ Example: [true, false, true]`;
             parsed = JSON.parse(result.content);
         }
         catch {
+            core.warning('LLM revalidation failed: could not parse model response. All findings passed through unchecked.');
             return { valid: findings, dropped: 0 };
         }
         if (!Array.isArray(parsed))
@@ -63,6 +65,7 @@ Example: [true, false, true]`;
         return { valid, dropped };
     }
     catch {
+        core.warning('LLM revalidation failed: model call threw an error. All findings passed through unchecked.');
         return { valid: findings, dropped: 0 };
     }
 }
