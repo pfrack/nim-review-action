@@ -35,6 +35,8 @@ export function chunkDiff(diff, maxTokens = 12000) {
             currentChunk.push(line);
             currentTokens += line.length;
             if (currentTokens > maxTokens * 4) {
+                currentChunk.pop();
+                currentTokens -= line.length;
                 pushChunk();
                 currentChunk = [line];
                 currentTokens = line.length;

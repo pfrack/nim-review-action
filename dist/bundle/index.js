@@ -27741,7 +27741,12 @@ ${findingsText}
 
 Respond with ONLY a JSON array of booleans, one per finding, where true = valid, false = hallucination.
 Example: [true, false, true]`;
-    const truncatedDiff = diff.length > 8000 ? diff.slice(0, 8000) + '\n... (truncated)' : diff;
+    const MAX_DIFF_LENGTH = 8000;
+    let truncatedDiff = diff;
+    if (diff.length > MAX_DIFF_LENGTH) {
+        const lastNewline = diff.slice(0, MAX_DIFF_LENGTH).lastIndexOf('\n');
+        truncatedDiff = diff.slice(0, lastNewline > 0 ? lastNewline : MAX_DIFF_LENGTH) + '\n... (truncated)';
+    }
     try {
         const result = await client.chat(model, [
             { role: 'system', content: 'You are a validation assistant. Respond only with a JSON array of booleans.' },
@@ -36780,7 +36785,7 @@ function mergeFindings(batchResults) {
             summaries.push(result.summary);
         }
         for (const finding of result.findings) {
-            const key = `${finding.file}:${finding.line_start ?? 'file'}:${finding.line_end ?? 'file'}:${finding.severity}:${finding.issue.trim().toLowerCase()}`;
+            const key = `${finding.file}:${finding.line_start ?? 'file'}:${finding.line_end ?? 'file'}:${finding.severity}:${finding.issue.trim().toLowerCase()}:${finding.suggestion?.trim().toLowerCase() || ''}`;
             if (!seen.has(key)) {
                 seen.add(key);
                 merged.push(finding);

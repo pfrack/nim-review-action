@@ -23,7 +23,7 @@ export function mergeFindings(batchResults) {
             summaries.push(result.summary);
         }
         for (const finding of result.findings) {
-            const key = `${finding.file}:${finding.line_start ?? 'file'}:${finding.line_end ?? 'file'}:${finding.severity}:${finding.issue.trim().toLowerCase()}`;
+            const key = `${finding.file}:${finding.line_start ?? 'file'}:${finding.line_end ?? 'file'}:${finding.severity}:${finding.issue.trim().toLowerCase()}:${finding.suggestion?.trim().toLowerCase() || ''}`;
             if (!seen.has(key)) {
                 seen.add(key);
                 merged.push(finding);
