@@ -2,6 +2,7 @@ import * as core from '@actions/core';
 import { JSON_SCHEMA_DEFINITION } from './review-schema.js';
 import { SEVERITY_GUIDANCE } from './prompts.js';
 import { withRetry, RetryableError } from './retry.js';
+import { validateCodeContext } from './validation.js';
 export const BASE_SYSTEM_PROMPT = `You are an expert senior software engineer performing a code review.
 Analyse the diff provided for bugs, security issues, performance problems, and style/readability concerns.
 
@@ -31,6 +32,8 @@ export function loadConfig() {
         excludePatterns: splitCSV(core.getInput('exclude_patterns') || '*.lock,*.md,*.txt,*.svg,*.png,*.sum,*.json,*.yaml,*.yml,*.toml,*.mod,*.sum,.mimocode/*,go.sum,go.mod'),
         systemPrompt: core.getInput('nim_system_prompt'),
         promptMode,
+        customRules: core.getInput('custom_rules') || '',
+        revalidateFindings: core.getInput('revalidate_findings') === 'true',
     };
 }
 const diffHeaderRe = /^diff --git a\/(.+?) b\/(.+)$/;
@@ -120,6 +123,11 @@ export function validateFindings(review, filesDiff, changedFiles) {
                 warnings.push(`Note: finding line ${f.line_start} outside changed hunks in "${f.file}"`);
                 continue;
             }
+        }
+        const codeContext = validateCodeContext(f, filesDiff[f.file] || '');
+        if (!codeContext.valid) {
+            warnings.push(`Note: ${codeContext.reason} in "${f.file}", dropping`);
+            continue;
         }
         validFindings.push(f);
     }

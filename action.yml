@@ -51,6 +51,10 @@ inputs:
     description: 'Custom review rules (one per line, e.g., "Always check for SQL injection")'
     required: false
     default: ''
+  revalidate_findings:
+    description: 'Re-validate findings with LLM before posting (reduces false positives, adds latency)'
+    required: false
+    default: 'false'
 runs:
   using: 'node24'
   main: 'dist/bundle/index.js'

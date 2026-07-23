@@ -26,6 +26,7 @@ export interface Config {
   systemPrompt: string;
   promptMode: string;
   customRules: string;
+  revalidateFindings: boolean;
 }
 
 function splitCSV(s: string): string[] {
@@ -53,6 +54,7 @@ export function loadConfig(): Config {
     systemPrompt: core.getInput('nim_system_prompt'),
     promptMode,
     customRules: core.getInput('custom_rules') || '',
+  revalidateFindings: core.getInput('revalidate_findings') === 'true',
   };
 }
 
