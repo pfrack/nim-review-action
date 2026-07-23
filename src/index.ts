@@ -220,10 +220,9 @@ async function run(): Promise<void> {
   }
 
   const modelShort = usedModel.split('/').pop() || usedModel;
-  const hasIssues = review && review.findings.length > 0;
 
   // No issues found — delete existing comment if present
-  if (review && !hasIssues) {
+  if (review && review.findings.length === 0) {
     const existingId = await findExistingComment(repo, prNumber, token);
     if (existingId) {
       await deleteComment(repo, existingId, token);
@@ -234,15 +233,15 @@ async function run(): Promise<void> {
 
   const sections: string[] = [`### AI Code Review\n\n<sub>Model: ${modelShort}</sub>\n`];
 
-  if (hasIssues) {
-    const { critical, warning, suggestion } = severityTally(review!);
+  if (review) {
+    const { critical, warning, suggestion } = severityTally(review);
     const tally = [
       critical ? `🚨 ${critical} critical${critical === 1 ? '' : 's'}` : null,
       warning ? `⚠️ ${warning} warning${warning === 1 ? '' : 's'}` : null,
       suggestion ? `💡 ${suggestion} suggestion${suggestion === 1 ? '' : 's'}` : null,
     ].filter(Boolean).join(' · ');
     sections.push(`\n${tally}\n`);
-    sections.push(`\n${renderReview(review!)}`);
+    sections.push(`\n${renderReview(review)}`);
   } else if (!usedModel) {
     sections.push(`\nNo review content returned from any model.`);
   } else if (config.promptMode === 'replace' && lastRawContent) {

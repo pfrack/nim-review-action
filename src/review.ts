@@ -145,6 +145,7 @@ export function validateFindings(
       const fileHunks = hunks.get(f.file) || [];
       const overlaps = fileHunks.some(h => f.line_start! <= h.end && (f.line_end ?? f.line_start!) >= h.start);
       if (!overlaps) {
+        // Drop findings outside changed hunks — they reference unmodified code and are not actionable
         warnings.push(`Note: finding line ${f.line_start} outside changed hunks in "${f.file}"`);
         continue;
       }
@@ -267,6 +268,7 @@ export async function postComment(repo: string, prNumber: number, token: string,
 
 export async function deleteComment(repo: string, commentId: number, token: string): Promise<void> {
   const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
+  // AbortSignal.timeout requires Node >= 15.12; action runs on node24
   await withRetry(async () => {
     const response = await fetch(url, {
       method: 'DELETE',

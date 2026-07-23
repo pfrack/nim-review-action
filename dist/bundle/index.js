@@ -35690,7 +35690,8 @@ function validateFindings(review, filesDiff, changedFiles) {
             const fileHunks = hunks.get(f.file) || [];
             const overlaps = fileHunks.some(h => f.line_start <= h.end && (f.line_end ?? f.line_start) >= h.start);
             if (!overlaps) {
-                warnings.push(`Warning: finding line ${f.line_start} outside changed hunks in "${f.file}", dropping`);
+                // Drop findings outside changed hunks — they reference unmodified code and are not actionable
+                warnings.push(`Note: finding line ${f.line_start} outside changed hunks in "${f.file}"`);
                 continue;
             }
         }
@@ -35785,7 +35786,6 @@ async function fetchDiff(repo, prNumber, token) {
 }
 const COMMENT_MARKER = '### AI Code Review';
 async function postComment(repo, prNumber, token, body) {
-    // Try to find and update an existing review comment
     const existingId = await findExistingComment(repo, prNumber, token);
     if (existingId) {
         await updateComment(repo, existingId, token, body);
@@ -35793,6 +35793,24 @@ async function postComment(repo, prNumber, token, body) {
     else {
         await createComment(repo, prNumber, token, body);
     }
+}
+async function deleteComment(repo, commentId, token) {
+    const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
+    // AbortSignal.timeout requires Node >= 15.12; action runs on node24
+    await retry_withRetry(async () => {
+        const response = await fetch(url, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/vnd.github+json',
+            },
+            signal: AbortSignal.timeout(30_000),
+        });
+        if (!response.ok) {
+            const body = await response.text();
+            throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+        }
+    });
 }
 async function findExistingComment(repo, prNumber, token) {
     let page = 1;
@@ -36479,8 +36497,17 @@ async function run() {
         }
     }
     const modelShort = usedModel.split('/').pop() || usedModel;
+    // No issues found — delete existing comment if present
+    if (review && review.findings.length === 0) {
+        const existingId = await findExistingComment(repo, prNumber, token);
+        if (existingId) {
+            await deleteComment(repo, existingId, token);
+            lib_core.info('Deleted previous review comment (no issues found)');
+        }
+        return;
+    }
     const sections = [`### AI Code Review\n\n<sub>Model: ${modelShort}</sub>\n`];
-    if (review && review.findings.length > 0) {
+    if (review) {
         const { critical, warning, suggestion } = severityTally(review);
         const tally = [
             critical ? `🚨 ${critical} critical${critical === 1 ? '' : 's'}` : null,
@@ -36488,8 +36515,6 @@ async function run() {
             suggestion ? `💡 ${suggestion} suggestion${suggestion === 1 ? '' : 's'}` : null,
         ].filter(Boolean).join(' · ');
         sections.push(`\n${tally}\n`);
-    }
-    if (review) {
         sections.push(`\n${renderReview(review)}`);
     }
     else if (!usedModel) {
@@ -36497,9 +36522,6 @@ async function run() {
     }
     else if (config.promptMode === 'replace' && lastRawContent) {
         sections.push(`\n**Note:** The model's response did not match the expected JSON schema; showing raw output.\n\n\`\`\`\n${lastRawContent}\n\`\`\``);
-    }
-    else {
-        sections.push(`\nNo issues found.`);
     }
     if (truncated) {
         sections.push(`\n---\nReached max file limit (${config.maxFiles}); ${reviewableFiles.length - config.maxFiles} files skipped.`);
