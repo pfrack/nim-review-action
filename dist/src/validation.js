@@ -3,8 +3,21 @@ export function validateCodeContext(finding, diff) {
     const issue = finding.issue;
     const warnings = [];
     function nameInDiff(name) {
-        const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        return new RegExp(`\\b${escaped}\\b`).test(diff);
+        const MAX_NAME_LENGTH = 80;
+        const safeName = name.length > MAX_NAME_LENGTH ? name.slice(0, MAX_NAME_LENGTH) : name;
+        const lowerDiff = diff.toLowerCase();
+        const lowerName = safeName.toLowerCase();
+        let idx = 0;
+        while (true) {
+            idx = lowerDiff.indexOf(lowerName, idx);
+            if (idx === -1)
+                return false;
+            const before = idx === 0 || !/\w/.test(diff[idx - 1]);
+            const after = idx + lowerName.length >= lowerDiff.length || !/\w/.test(diff[idx + lowerName.length]);
+            if (before && after)
+                return true;
+            idx += 1;
+        }
     }
     // Check for backtick-wrapped identifiers (most reliable)
     const backtickRefs = issue.match(/`(\w+)`/g);

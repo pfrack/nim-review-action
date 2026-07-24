@@ -27706,8 +27706,21 @@ function validateCodeContext(finding, diff) {
     const issue = finding.issue;
     const warnings = [];
     function nameInDiff(name) {
-        const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        return new RegExp(`\\b${escaped}\\b`).test(diff);
+        const MAX_NAME_LENGTH = 80;
+        const safeName = name.length > MAX_NAME_LENGTH ? name.slice(0, MAX_NAME_LENGTH) : name;
+        const lowerDiff = diff.toLowerCase();
+        const lowerName = safeName.toLowerCase();
+        let idx = 0;
+        while (true) {
+            idx = lowerDiff.indexOf(lowerName, idx);
+            if (idx === -1)
+                return false;
+            const before = idx === 0 || !/\w/.test(diff[idx - 1]);
+            const after = idx + lowerName.length >= lowerDiff.length || !/\w/.test(diff[idx + lowerName.length]);
+            if (before && after)
+                return true;
+            idx += 1;
+        }
     }
     // Check for backtick-wrapped identifiers (most reliable)
     const backtickRefs = issue.match(/`(\w+)`/g);
@@ -35918,11 +35931,17 @@ function parseRules(input) {
     });
 }
 const INJECTION_PATTERNS = [
-    /ignore\s+(previous|all|above)\s+instructions/i,
-    /disregard\s+(previous|all|above)/i,
-    /you\s+are\s+now\s+/i,
-    /new\s+instructions?:/i,
+    /ignore\s+(?:all\s+)?(?:previous\s+)?(?:safety\s+)?(instructions|rules|context|reviews)/i,
+    /disregard\s+(?:all\s+)?(?:previous\s+)?(?:safety\s+)?(instructions|rules|context|reviews)/i,
+    /forget\s+(?:all\s+)?(?:previous\s+)?(?:safety\s+)?(instructions|rules|context|reviews)/i,
+    /you\s+are\s+now\s+(?:a\s+)?(different|new)\s+(model|assistant|AI|reviewer|bot|tool)/i,
+    /you\s+are\s+now\s+(?:required|instructed|tasked|going)\s+to/i,
+    /new\s+instructions?\s*:\s*(?:follow|adopt|use|ignore|switch)/i,
     /system\s*prompt\s*override/i,
+    /pretend\s+you\s+are\s+(?:not\s+)?(?:a\s+)?(different|new)?\s*(reviewer|assistant|AI|bot|tool)/i,
+    /act\s+as\s+(?:if|though)\s+you\s+(?:are|were)\s+(?:not|a\s+different)/i,
+    /override\s+(?:your|the)\s+(?:system|default|prior)\s+(?:prompt|instructions|behavior)/i,
+    /skip\s+(?:all\s+)?(?:previous\s+)?(?:safety\s+)?(instructions|rules|checks|reviews)/i,
 ];
 function validateRules(rules) {
     const errors = [];
@@ -36623,12 +36642,23 @@ async function createReview(repo, prNumber, commitSha, findings, body, token) {
         throw new Error('GITHUB_TOKEN required for review creation');
     const comments = findings
         .filter(f => f.line_start != null)
-        .map(f => ({
-        path: f.file,
-        line: f.line_start,
-        body: formatFindingComment(f),
-        side: 'RIGHT',
-    }));
+        .map(f => {
+        const isMultiLine = f.line_end != null && f.line_end !== f.line_start;
+        const comment = {
+            path: f.file,
+            line: isMultiLine ? f.line_end : f.line_start,
+            body: formatFindingComment(f),
+            side: 'RIGHT',
+        };
+        if (isMultiLine) {
+            const start = f.line_start;
+            const end = f.line_end;
+            if (start != null && end > start) {
+                comment.start_line = start;
+            }
+        }
+        return comment;
+    });
     const payload = {
         event: 'COMMENT',
         comments,
@@ -36785,9 +36815,14 @@ function mergeFindings(batchResults) {
             summaries.push(result.summary);
         }
         for (const finding of result.findings) {
-            const key = `${finding.file}:${finding.line_start ?? 'file'}:${finding.line_end ?? 'file'}:${finding.severity}:${finding.issue.trim().toLowerCase()}:${finding.suggestion?.trim().toLowerCase() || ''}`;
-            if (!seen.has(key)) {
+            const key = finding.line_start != null
+                ? `${finding.file}:${finding.line_start}:${finding.line_end ?? 'none'}:${finding.severity}:${finding.issue.trim().toLowerCase()}:${(finding.suggestion || '').trim().toLowerCase()}`
+                : null;
+            if (key !== null && !seen.has(key)) {
                 seen.add(key);
+                merged.push(finding);
+            }
+            else if (key === null) {
                 merged.push(finding);
             }
         }

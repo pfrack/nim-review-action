@@ -9,6 +9,7 @@ export const AI_REVIEW_MARKER = '### AI Code Review';
 interface ReviewComment {
   path: string;
   line: number;
+  start_line?: number;
   body: string;
   side: 'RIGHT';
 }
@@ -51,12 +52,23 @@ export async function createReview(
 
   const comments: ReviewComment[] = findings
     .filter(f => f.line_start != null)
-    .map(f => ({
-      path: f.file,
-      line: f.line_start!,
-      body: formatFindingComment(f),
-      side: 'RIGHT' as const,
-    }));
+    .map(f => {
+      const isMultiLine = f.line_end != null && f.line_end !== f.line_start;
+      const comment: ReviewComment = {
+        path: f.file,
+        line: isMultiLine ? f.line_end! : f.line_start!,
+        body: formatFindingComment(f),
+        side: 'RIGHT' as const,
+      };
+      if (isMultiLine) {
+        const start = f.line_start;
+        const end = f.line_end!;
+        if (start != null && end > start) {
+          comment.start_line = start;
+        }
+      }
+      return comment;
+    });
 
   const payload: CreateReviewPayload = {
     event: 'COMMENT',

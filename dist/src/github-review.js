@@ -25,12 +25,23 @@ export async function createReview(repo, prNumber, commitSha, findings, body, to
         throw new Error('GITHUB_TOKEN required for review creation');
     const comments = findings
         .filter(f => f.line_start != null)
-        .map(f => ({
-        path: f.file,
-        line: f.line_start,
-        body: formatFindingComment(f),
-        side: 'RIGHT',
-    }));
+        .map(f => {
+        const isMultiLine = f.line_end != null && f.line_end !== f.line_start;
+        const comment = {
+            path: f.file,
+            line: isMultiLine ? f.line_end : f.line_start,
+            body: formatFindingComment(f),
+            side: 'RIGHT',
+        };
+        if (isMultiLine) {
+            const start = f.line_start;
+            const end = f.line_end;
+            if (start != null && end > start) {
+                comment.start_line = start;
+            }
+        }
+        return comment;
+    });
     const payload = {
         event: 'COMMENT',
         comments,

@@ -9,19 +9,22 @@ export function chunkDiff(diff: string, maxTokens: number = 12000): DiffChunk[] 
   const chunks: DiffChunk[] = [];
   let preamble: string[] = [];
   let currentChunk: string[] = [];
-  let currentStart = 1;
   let currentTokens = 0;
   let lastHunkHeader = '';
-  let linesInHunk = 0;
+  let nextStartLine = 1;
+
+  function countContentLines(chunk: string[]): number {
+    return chunk.filter(l => l.startsWith('+') || l.startsWith(' ') || (!l.startsWith('@@') && !l.startsWith('-') && l !== '')).length;
+  }
 
   function pushChunk() {
     if (currentChunk.length > 0 && currentTokens > 0) {
       chunks.push({
         header: lastHunkHeader || currentChunk[0] || '',
         content: currentChunk.join('\n'),
-        startLine: currentStart + linesInHunk,
+        startLine: nextStartLine,
       });
-      linesInHunk += currentChunk.filter(l => !l.startsWith('@@')).length;
+      nextStartLine += countContentLines(currentChunk);
     }
   }
 
@@ -32,9 +35,8 @@ export function chunkDiff(diff: string, maxTokens: number = 12000): DiffChunk[] 
       currentChunk = preamble.length > 0 ? [...preamble, line] : [line];
       preamble = [];
       lastHunkHeader = line;
-      currentStart = parseInt(headerMatch[1], 10);
+      nextStartLine = parseInt(headerMatch[1], 10);
       currentTokens = currentChunk.join('\n').length;
-      linesInHunk = 0;
     } else if (currentChunk.length === 0) {
       preamble.push(line);
     } else {

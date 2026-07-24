@@ -38,11 +38,17 @@ export function parseRules(input: string): Rule[] {
 }
 
 const INJECTION_PATTERNS = [
-  /ignore\s+(previous|all|above)\s+instructions/i,
-  /disregard\s+(previous|all|above)/i,
-  /you\s+are\s+now\s+/i,
-  /new\s+instructions?:/i,
+  /ignore\s+(?:all\s+)?(?:previous\s+)?(?:safety\s+)?(instructions|rules|context|reviews)/i,
+  /disregard\s+(?:all\s+)?(?:previous\s+)?(?:safety\s+)?(instructions|rules|context|reviews)/i,
+  /forget\s+(?:all\s+)?(?:previous\s+)?(?:safety\s+)?(instructions|rules|context|reviews)/i,
+  /you\s+are\s+now\s+(?:a\s+)?(different|new)\s+(model|assistant|AI|reviewer|bot|tool)/i,
+  /you\s+are\s+now\s+(?:required|instructed|tasked|going)\s+to/i,
+  /new\s+instructions?\s*:\s*(?:follow|adopt|use|ignore|switch)/i,
   /system\s*prompt\s*override/i,
+  /pretend\s+you\s+are\s+(?:not\s+)?(?:a\s+)?(different|new)?\s*(reviewer|assistant|AI|bot|tool)/i,
+  /act\s+as\s+(?:if|though)\s+you\s+(?:are|were)\s+(?:not|a\s+different)/i,
+  /override\s+(?:your|the)\s+(?:system|default|prior)\s+(?:prompt|instructions|behavior)/i,
+  /skip\s+(?:all\s+)?(?:previous\s+)?(?:safety\s+)?(instructions|rules|checks|reviews)/i,
 ];
 
 export interface RulesValidation {
