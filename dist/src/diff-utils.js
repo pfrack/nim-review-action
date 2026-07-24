@@ -7,7 +7,7 @@ export function chunkDiff(diff, maxTokens = 12000) {
     let lastHunkHeader = '';
     let nextStartLine = 1;
     function countContentLines(chunk) {
-        return chunk.filter(l => l.startsWith('+') || l.startsWith(' ') || (!l.startsWith('@@') && !l.startsWith('-') && l !== '')).length;
+        return chunk.filter(l => l.startsWith('+') || l.startsWith(' ')).length;
     }
     function pushChunk() {
         if (currentChunk.length > 0 && currentTokens > 0) {

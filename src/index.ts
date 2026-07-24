@@ -150,7 +150,7 @@ async function run(): Promise<void> {
   }
   const detectedLanguage = Object.entries(langCounts)
     .filter(([lang]) => lang !== 'generic')
-    .sort(([, a], [, b]) => b - a)[0]?.[0];
+    .sort(([a, countA], [b, countB]) => countB - countA || a.localeCompare(b))[0]?.[0];
   if (detectedLanguage) {
     core.info(`Detected language: ${detectedLanguage}`);
   }

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { formatFindingComment, shouldUseInlineComments, createReview, findExistingReview, deleteReview } from './github-review.js';
+import { formatFindingComment, shouldUseInlineComments, createReview, findExistingReview, deleteReview, BOT_LOGIN } from './github-review.js';
 import type { ReviewFinding } from './review-schema.js';
 
 function makeFinding(overrides: Partial<ReviewFinding> = {}): ReviewFinding {
@@ -148,8 +148,8 @@ describe('findExistingReview', () => {
     globalThis.fetch = async () => ({
       ok: true,
       json: async () => [
-        { id: 100, body: 'Some other review', user: { login: 'bot' } },
-        { id: 200, body: '### AI Code Review\nFindings here', user: { login: 'bot' } },
+        { id: 100, body: 'Some other review', user: { login: 'other-bot' } },
+        { id: 200, body: '### AI Code Review\nFindings here', user: { login: BOT_LOGIN } },
       ],
     }) as any;
     try {
@@ -164,7 +164,22 @@ describe('findExistingReview', () => {
     globalThis.fetch = async () => ({
       ok: true,
       json: async () => [
-        { id: 100, body: 'Some other review', user: { login: 'bot' } },
+        { id: 200, body: '### AI Code Review\nFindings here', user: { login: 'other-bot' } },
+      ],
+    }) as any;
+    try {
+      const reviewId = await findExistingReview('owner/repo', 42, 'token');
+      assert.strictEqual(reviewId, null);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('returns null when matching marker but wrong bot login', async () => {
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => [
+        { id: 200, body: '### AI Code Review\nFindings here', user: { login: 'human-reviewer' } },
       ],
     }) as any;
     try {

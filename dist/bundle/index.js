@@ -27812,7 +27812,147 @@ function escapeMarkdown(text) {
     return text.replace(/[\\*_{}\[\]()#`>+~|!]/g, '\\$&');
 }
 
+;// CONCATENATED MODULE: ./src/github-review.ts
+
+
+
+const GITHUB_API_TIMEOUT_MS = 30_000;
+const AI_REVIEW_MARKER = '### AI Code Review';
+const BOT_LOGIN = process.env.GITHUB_ACTOR || 'github-actions';
+function formatFindingComment(finding) {
+    const emoji = finding.severity === 'Critical' ? '🚨'
+        : finding.severity === 'Warning' ? '⚠️'
+            : '💡';
+    const parts = [`${emoji} **${finding.severity}**`];
+    parts.push(escapeMarkdown(finding.issue));
+    if (finding.suggestion) {
+        parts.push(`**Suggestion:** ${escapeMarkdown(finding.suggestion)}`);
+    }
+    const action = finding.severity === 'Critical' ? finding.critical_action
+        : finding.severity === 'Warning' ? finding.warning_action
+            : finding.suggestion_action;
+    if (action && action !== 'not applicable') {
+        parts.push(`**Action:** ${escapeMarkdown(action)}`);
+    }
+    return parts.join('\n\n');
+}
+async function createReview(repo, prNumber, commitSha, findings, body, token) {
+    if (!token)
+        throw new Error('GITHUB_TOKEN required for review creation');
+    const comments = findings
+        .filter(f => f.line_start != null)
+        .map(f => {
+        const isMultiLine = f.line_end != null && f.line_end !== f.line_start;
+        const comment = {
+            path: f.file,
+            line: isMultiLine ? f.line_end : f.line_start,
+            body: formatFindingComment(f),
+            side: 'RIGHT',
+        };
+        if (isMultiLine) {
+            const start = f.line_start;
+            const end = f.line_end;
+            if (start != null && end > start) {
+                comment.start_line = start;
+            }
+        }
+        return comment;
+    });
+    const payload = {
+        event: 'COMMENT',
+        comments,
+        commit_id: commitSha,
+    };
+    if (body)
+        payload.body = body;
+    const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews`;
+    const resp = await retry_withRetry(async () => {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/vnd.github+json',
+            },
+            body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+        });
+        if (!response.ok) {
+            const errBody = await response.text();
+            throw new RetryableError(`GitHub API returned ${response.status}: ${errBody}`, response.status);
+        }
+        return response;
+    });
+    const data = await resp.json();
+    return data.id;
+}
+async function findExistingReview(repo, prNumber, token) {
+    let page = 1;
+    const perPage = 100;
+    const maxPages = 50;
+    while (page <= maxPages) {
+        const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews?per_page=${perPage}&page=${page}`;
+        let resp;
+        try {
+            resp = await retry_withRetry(async () => {
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Accept': 'application/vnd.github+json',
+                    },
+                    signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+                });
+                if (!response.ok) {
+                    const body = await response.text();
+                    throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+                }
+                return response;
+            });
+        }
+        catch (err) {
+            if (err instanceof RetryableError && err.status === 404)
+                return null;
+            throw err;
+        }
+        const reviews = await resp.json();
+        for (const review of reviews) {
+            if (review.body?.startsWith(AI_REVIEW_MARKER) && review.user.login === BOT_LOGIN) {
+                return review.id;
+            }
+        }
+        if (reviews.length < perPage)
+            break;
+        page++;
+    }
+    if (page > maxPages) {
+        lib_core.warning(`findExistingReview: hit max page limit (${maxPages}) without finding a matching review`);
+    }
+    return null;
+}
+async function deleteReview(repo, prNumber, reviewId, token) {
+    const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews/${reviewId}`;
+    await retry_withRetry(async () => {
+        const response = await fetch(url, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/vnd.github+json',
+            },
+            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+        });
+        if (!response.ok) {
+            const body = await response.text();
+            throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
+        }
+    });
+}
+const INLINE_COMMENT_THRESHOLD = 50;
+function shouldUseInlineComments(findings) {
+    return findings.filter(f => f.line_start != null).length <= INLINE_COMMENT_THRESHOLD;
+}
+
 ;// CONCATENATED MODULE: ./src/review.ts
+
 
 
 
@@ -28016,7 +28156,7 @@ async function fetchDiff(repo, prNumber, token) {
                 'Authorization': `Bearer ${token}`,
                 'Accept': 'application/vnd.github.v3.diff',
             },
-            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+            signal: AbortSignal.timeout(review_GITHUB_API_TIMEOUT_MS),
         });
         if (!response.ok) {
             const body = await response.text();
@@ -28031,8 +28171,7 @@ async function fetchDiff(repo, prNumber, token) {
     }
     return parseDiff(raw);
 }
-const COMMENT_MARKER = '### AI Code Review';
-const GITHUB_API_TIMEOUT_MS = 30_000;
+const review_GITHUB_API_TIMEOUT_MS = 30_000;
 async function postComment(repo, prNumber, token, body) {
     const existingId = await findExistingComment(repo, prNumber, token);
     if (existingId) {
@@ -28049,7 +28188,7 @@ async function deleteComment(repo, commentId, token) {
                 'Authorization': `Bearer ${token}`,
                 'Accept': 'application/vnd.github+json',
             },
-            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+            signal: AbortSignal.timeout(review_GITHUB_API_TIMEOUT_MS),
         });
         if (!response.ok) {
             const body = await response.text();
@@ -28071,7 +28210,7 @@ async function findExistingComment(repo, prNumber, token) {
                         'Authorization': `Bearer ${token}`,
                         'Accept': 'application/vnd.github+json',
                     },
-                    signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+                    signal: AbortSignal.timeout(review_GITHUB_API_TIMEOUT_MS),
                 });
                 if (!response.ok) {
                     const body = await response.text();
@@ -28088,7 +28227,7 @@ async function findExistingComment(repo, prNumber, token) {
         }
         const comments = await resp.json();
         for (const comment of comments) {
-            if (comment.body.startsWith(COMMENT_MARKER)) {
+            if (comment.body.startsWith(AI_REVIEW_MARKER) && comment.user.login === BOT_LOGIN) {
                 return comment.id;
             }
         }
@@ -28109,7 +28248,7 @@ async function createComment(repo, prNumber, token, body) {
                 'Accept': 'application/vnd.github+json',
             },
             body: JSON.stringify({ body }),
-            signal: AbortSignal.timeout(GITHUB_API_TIMEOUT_MS),
+            signal: AbortSignal.timeout(review_GITHUB_API_TIMEOUT_MS),
         });
         if (!response.ok) {
             const body = await response.text();
@@ -35917,17 +36056,11 @@ function parseRules(input) {
         }
         const categoryMatch = description.match(/^([^:]+):\s*/);
         let category = 'custom';
-        let pattern;
         if (categoryMatch) {
             category = categoryMatch[1].trim().toLowerCase();
             description = description.slice(categoryMatch[0].length);
         }
-        const patternMatch = description.match(/^\/(.+?)\/\s*/);
-        if (patternMatch) {
-            pattern = patternMatch[1];
-            description = description.slice(patternMatch[0].length);
-        }
-        return { category, severity, description: description.trim(), pattern };
+        return { category, severity, description: description.trim() };
     });
 }
 const INJECTION_PATTERNS = [
@@ -36614,144 +36747,6 @@ async function probeModels(chain, clients) {
     return available[0].model;
 }
 
-;// CONCATENATED MODULE: ./src/github-review.ts
-
-
-
-const github_review_GITHUB_API_TIMEOUT_MS = 30_000;
-const AI_REVIEW_MARKER = '### AI Code Review';
-function formatFindingComment(finding) {
-    const emoji = finding.severity === 'Critical' ? '🚨'
-        : finding.severity === 'Warning' ? '⚠️'
-            : '💡';
-    const parts = [`${emoji} **${finding.severity}**`];
-    parts.push(escapeMarkdown(finding.issue));
-    if (finding.suggestion) {
-        parts.push(`**Suggestion:** ${escapeMarkdown(finding.suggestion)}`);
-    }
-    const action = finding.severity === 'Critical' ? finding.critical_action
-        : finding.severity === 'Warning' ? finding.warning_action
-            : finding.suggestion_action;
-    if (action && action !== 'not applicable') {
-        parts.push(`**Action:** ${escapeMarkdown(action)}`);
-    }
-    return parts.join('\n\n');
-}
-async function createReview(repo, prNumber, commitSha, findings, body, token) {
-    if (!token)
-        throw new Error('GITHUB_TOKEN required for review creation');
-    const comments = findings
-        .filter(f => f.line_start != null)
-        .map(f => {
-        const isMultiLine = f.line_end != null && f.line_end !== f.line_start;
-        const comment = {
-            path: f.file,
-            line: isMultiLine ? f.line_end : f.line_start,
-            body: formatFindingComment(f),
-            side: 'RIGHT',
-        };
-        if (isMultiLine) {
-            const start = f.line_start;
-            const end = f.line_end;
-            if (start != null && end > start) {
-                comment.start_line = start;
-            }
-        }
-        return comment;
-    });
-    const payload = {
-        event: 'COMMENT',
-        comments,
-        commit_id: commitSha,
-    };
-    if (body)
-        payload.body = body;
-    const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews`;
-    const resp = await retry_withRetry(async () => {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/vnd.github+json',
-            },
-            body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(github_review_GITHUB_API_TIMEOUT_MS),
-        });
-        if (!response.ok) {
-            const errBody = await response.text();
-            throw new RetryableError(`GitHub API returned ${response.status}: ${errBody}`, response.status);
-        }
-        return response;
-    });
-    const data = await resp.json();
-    return data.id;
-}
-async function findExistingReview(repo, prNumber, token) {
-    let page = 1;
-    const perPage = 100;
-    const maxPages = 50;
-    while (page <= maxPages) {
-        const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews?per_page=${perPage}&page=${page}`;
-        let resp;
-        try {
-            resp = await retry_withRetry(async () => {
-                const response = await fetch(url, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Accept': 'application/vnd.github+json',
-                    },
-                    signal: AbortSignal.timeout(github_review_GITHUB_API_TIMEOUT_MS),
-                });
-                if (!response.ok) {
-                    const body = await response.text();
-                    throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
-                }
-                return response;
-            });
-        }
-        catch (err) {
-            if (err instanceof RetryableError && err.status === 404)
-                return null;
-            throw err;
-        }
-        const reviews = await resp.json();
-        for (const review of reviews) {
-            if (review.body?.startsWith(AI_REVIEW_MARKER)) {
-                return review.id;
-            }
-        }
-        if (reviews.length < perPage)
-            break;
-        page++;
-    }
-    if (page > maxPages) {
-        lib_core.warning(`findExistingReview: hit max page limit (${maxPages}) without finding a matching review`);
-    }
-    return null;
-}
-async function deleteReview(repo, prNumber, reviewId, token) {
-    const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/reviews/${reviewId}`;
-    await retry_withRetry(async () => {
-        const response = await fetch(url, {
-            method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Accept': 'application/vnd.github+json',
-            },
-            signal: AbortSignal.timeout(github_review_GITHUB_API_TIMEOUT_MS),
-        });
-        if (!response.ok) {
-            const body = await response.text();
-            throw new RetryableError(`GitHub API returned ${response.status}: ${body}`, response.status);
-        }
-    });
-}
-const INLINE_COMMENT_THRESHOLD = 50;
-function shouldUseInlineComments(findings) {
-    return findings.filter(f => f.line_start != null).length <= INLINE_COMMENT_THRESHOLD;
-}
-
 ;// CONCATENATED MODULE: ./src/metrics.ts
 function formatMetrics(metrics) {
     const duration = metrics.review_duration_ms > 0
@@ -36817,12 +36812,9 @@ function mergeFindings(batchResults) {
         for (const finding of result.findings) {
             const key = finding.line_start != null
                 ? `${finding.file}:${finding.line_start}:${finding.line_end ?? 'none'}:${finding.severity}:${finding.issue.trim().toLowerCase()}:${(finding.suggestion || '').trim().toLowerCase()}`
-                : null;
-            if (key !== null && !seen.has(key)) {
+                : `${finding.file}:file:${finding.severity}:${finding.issue.trim().toLowerCase()}:${(finding.suggestion || '').trim().toLowerCase()}`;
+            if (!seen.has(key)) {
                 seen.add(key);
-                merged.push(finding);
-            }
-            else if (key === null) {
                 merged.push(finding);
             }
         }
@@ -36964,7 +36956,7 @@ async function run() {
     }
     const detectedLanguage = Object.entries(langCounts)
         .filter(([lang]) => lang !== 'generic')
-        .sort(([, a], [, b]) => b - a)[0]?.[0];
+        .sort(([a, countA], [b, countB]) => countB - countA || a.localeCompare(b))[0]?.[0];
     if (detectedLanguage) {
         lib_core.info(`Detected language: ${detectedLanguage}`);
     }
